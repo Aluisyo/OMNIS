@@ -1,0 +1,478 @@
+// src/arnsWorker.ts
+// Web Worker for heavy ArNS tasks (batch resolve, filter, etc.)
+
+// Types for message passing
+export type WorkerRequest =
+  | { type: 'RESOLVE_OWNERS'; records: any[] }
+  | { type: 'RESOLVE_OWNERS_BATCH'; records: any[] }
+  | { type: 'FILTER_RECORDS'; records: any[]; search: string }
+  | { type: 'SORT_AND_PAGINATE_RECORDS'; records: any[]; search: string; sortBy: string; sortDirection: 'asc' | 'desc'; page: number; perPage: number }
+  | { type: 'CALCULATE_ANALYTICS_STATS'; records: any[] }
+  | { type: 'CALCULATE_TOP_HOLDERS'; records: any[] };
+
+export type WorkerResponse =
+  | { type: 'RESOLVED_OWNERS'; records: any[] }
+  | { type: 'RESOLVED_OWNERS_BATCH'; records: any[] }
+  | { type: 'FILTERED_RECORDS'; records: any[] }
+  | { type: 'SORTED_PAGINATED_RECORDS'; records: any[]; total: number }
+  | { type: 'ANALYTICS_STATS'; stats: any; trends: any; priceHistory: any }
+  | { type: 'TOP_HOLDERS'; holders: any[] };
+
+// Import the ARIO SDK
+import { ARIO } from '@ar.io/sdk';
+
+const ario = ARIO.mainnet();
+
+// Rate limiting controls
+const MIN_REQUEST_INTERVAL = 3000; // 3 seconds between requests
+let lastRequestTime = 0;
+
+// Helper function to ensure minimum time between API calls
+async function safeApiCall<T>(apiCall: () => Promise<T>): Promise<T> {
+  const now = Date.now();
+  const timeSinceLastRequest = now - lastRequestTime;
+  
+  // If we need to wait to respect rate limits
+  if (timeSinceLastRequest < MIN_REQUEST_INTERVAL && lastRequestTime !== 0) {
+    const waitTime = MIN_REQUEST_INTERVAL - timeSinceLastRequest;
+    console.log(`Worker: Waiting ${waitTime}ms before API call to avoid rate limiting`);
+    await new Promise(r => setTimeout(r, waitTime));
+  }
+  
+  lastRequestTime = Date.now();
+  return await apiCall();
+}
+
+// Helper: Throttle concurrent promises for rate-limit safety
+async function throttleAll<T, R>(items: T[], limit: number, fn: (item: T, idx: number) => Promise<R>, onProgress?: (progress: number, total: number) => void): Promise<R[]> {
+  const results: R[] = [];
+  let idx = 0;
+  let completed = 0;
+  const total = items.length;
+  
+  // Reduce concurrency to 1 to be safe
+  limit = 1; 
+  
+  async function runner() {
+    while (true) {
+      const current = idx++;
+      if (current >= items.length) break;
+      try {
+        // Add delay between each item in a single runner
+        if (completed > 0) {
+          await new Promise(r => setTimeout(r, MIN_REQUEST_INTERVAL));
+        }
+        
+        results[current] = await fn(items[current], current);
+      } catch (e) {
+        console.error(`Error processing item ${current}:`, e);
+        results[current] = undefined as any;
+      }
+      completed++;
+      if (onProgress) onProgress(completed, total);
+    }
+  }
+  
+  // Start limited runners
+  const runners = Array.from({ length: Math.min(limit, items.length) }, runner);
+  await Promise.all(runners);
+  return results;
+}
+
+// Helper for batch owner resolution using ar.io/sdk, with progress and error handling
+async function resolveOwnersBatch(records: any[]): Promise<any[]> {
+  // Only resolve records with missing owner
+  const unresolved = records.filter(r => r.owner == null);
+  if (unresolved.length === 0) return records;
+  const resolved = await throttleAll(unresolved, 1, async (r, idx) => {
+    try {
+      // Use safe API call to ensure rate limiting is respected
+      const resolved = await safeApiCall(() => ario.resolveArNSName({ name: r.name }));
+      
+      // Log success for monitoring
+      console.log(`Successfully resolved ${r.name} (${idx + 1}/${records.length})`);
+      
+      // Safely access all fields
+      return {
+        ...r,
+        ...resolved,
+        owner: (resolved && typeof resolved.owner === 'string') ? resolved.owner : (r.owner || ''),
+        startTimestamp: r.startTimestamp || (resolved && 'startTimestamp' in resolved ? (resolved as any).startTimestamp : undefined),
+        endTimestamp: r.endTimestamp || (resolved && 'endTimestamp' in resolved ? (resolved as any).endTimestamp : undefined),
+        purchasePrice: r.purchasePrice || (resolved && 'purchasePrice' in resolved ? (resolved as any).purchasePrice : undefined),
+        processId: r.processId || (resolved && 'processId' in resolved ? (resolved as any).processId : undefined),
+        type: r.type || (resolved && 'type' in resolved ? (resolved as any).type : undefined)
+      };
+    } catch (e) {
+      // Log detailed error information
+      console.error(`Error resolving ${r.name} (${idx + 1}/${records.length}):`, e);
+      self.postMessage({ type: 'RESOLUTION_ERROR', name: r.name, error: (e as Error).message });
+      
+      // Extra delay after error to help avoid further rate limiting
+      await new Promise(res => setTimeout(res, 5000));
+      
+      return { ...r };
+    } finally {
+      // Progress update after each, include record name
+      self.postMessage({ type: 'RESOLUTION_PROGRESS', current: idx + 1, total: records.length, name: r.name });
+    }
+  });
+  // Merge resolved owners back into the original records
+  const resolvedMap = new Map(resolved.map(r => [r.name, r]));
+  return records.map(r => resolvedMap.get(r.name) || r);
+}
+
+
+
+// Dummy resolver (replace with real logic or WASM call)
+async function resolveOwners(records: any[]): Promise<any[]> {
+  // Only resolve records with missing owner
+  return records.map(r => {
+    if (!r.owner) {
+      // Simulate async resolution (replace with WASM/SDK logic)
+      return { ...r, owner: 'dummy-owner' };
+    }
+    return r;
+  });
+}
+
+// Analytics: heavy stats/trends computation with progress
+async function calculateAnalyticsStatsInWorker(records: any[]) {
+  try {
+    // Simulate chunked progress for large sets
+    const chunkSize = 500;
+    const stats = { 
+      totalRegistrations: 0, 
+      dailyRegistrations: 0, 
+      weeklyRegistrations: 0, 
+      monthlyRegistrations: 0,
+      yearlyRegistrations: 0,
+      activePermabuys: 0,
+      activeLeases: 0,
+      uniqueOwners: 0,
+      averagePrice: 0,
+      growthRate: 0 
+    };
+    
+    // Track unique owners
+    const uniqueOwnersSet = new Set<string>();
+    
+    // Track monthly registrations for growth rate calculation
+    let currentMonthRegistrations = 0;
+    let previousMonthRegistrations = 0;
+    const trends: any[] = [];
+    let priceHistory: any[] = [];
+    
+    // Use current timestamp for "now" to ensure fresh calculations
+    const now = Date.now();
+    
+    // For debugging - count records by timestamp range
+    let last24h = 0;
+    let last7d = 0;
+    let last30d = 0;
+    
+    // For debugging - count records by type
+    const typeCount: Record<string, number> = {};
+    let nullTypeCount = 0;
+    let undefinedTypeCount = 0;
+    const oneDay = 24 * 60 * 60 * 1000;
+    const oneWeek = 7 * oneDay;
+    const oneMonth = 30 * oneDay;
+    let processed = 0;
+    const priceMap = new Map();
+    let totalPrice = 0;
+    let priceCount = 0;
+    for (let i = 0; i < records.length; i += chunkSize) {
+      const chunk = records.slice(i, i + chunkSize);
+      for (const record of chunk) {
+        // Add to total registrations
+        stats.totalRegistrations += 1;
+        
+        // Count recent registrations - use either registeredAt or startTimestamp
+        const timestamp = record.registeredAt || record.startTimestamp || 0;
+        
+        // Add debug info for first few records
+        if (stats.totalRegistrations < 5) {
+          console.log('Record timestamp info:', {
+            name: record.name,
+            registeredAt: record.registeredAt,
+            startTimestamp: record.startTimestamp,
+            used: timestamp,
+            now,
+            diff: now - timestamp,
+            oneDay,
+            oneWeek,
+            oneMonth
+          });
+        }
+        
+        // Check if this record was registered in the last 24 hours
+        if (now - timestamp <= oneDay) {
+          stats.dailyRegistrations += 1;
+          last24h++;
+        }
+        
+        // Check if this record was registered in the last 7 days
+        if (now - timestamp <= oneWeek) {
+          stats.weeklyRegistrations += 1;
+          last7d++;
+        }
+        
+        // Check if this record was registered in the last 30 days
+        if (now - timestamp <= oneMonth) {
+          stats.monthlyRegistrations += 1;
+          last30d++;
+        }
+        
+        // Check if this record was registered in the last year
+        if (now - timestamp <= 365 * oneDay) {
+          stats.yearlyRegistrations += 1;
+        }
+        
+        // Track unique owners
+        if (record.owner) {
+          uniqueOwnersSet.add(record.owner);
+        }
+        
+        // Log all record types in the first few records to help debug
+        if (stats.totalRegistrations < 10) {
+          console.log('Record type info:', {
+            name: record.name,
+            type: record.type,
+            expiresAt: record.expiresAt,
+            hasExpiration: record.expiresAt !== null && record.expiresAt !== undefined
+          });
+        }
+        
+        // Count each record type for debugging
+        if (record.type === null) {
+          nullTypeCount++;
+        } else if (record.type === undefined) {
+          undefinedTypeCount++;
+        } else {
+          // Initialize the counter if this is the first time seeing this type
+          if (!typeCount[record.type]) {
+            typeCount[record.type] = 0;
+          }
+          typeCount[record.type]++;
+        }
+        
+        // Distinguish between permabuys and leases based on record type and expiration
+        // First normalize the type field for case-insensitive comparison
+        const normalizedType = record.type ? String(record.type).toLowerCase() : '';
+        
+        // Check for permabuy variations
+        if (normalizedType.includes('perma') || normalizedType === 'permanent') {
+          stats.activePermabuys += 1;
+        } 
+        // Check for lease variations
+        else if (normalizedType.includes('lease') || normalizedType === 'temporary') {
+          stats.activeLeases += 1;
+        } 
+        // If type doesn't help, use expiration date as fallback
+        else {
+          const tenYearsFromNow = now + (10 * 365 * 24 * 60 * 60 * 1000);
+          
+          // If endTimestamp exists, it's likely a lease
+          if (record.endTimestamp && record.endTimestamp > 0) {
+            stats.activeLeases += 1;
+          }
+          // No expiration date typically means permabuy
+          else if (record.expiresAt === null || record.expiresAt === undefined) {
+            stats.activePermabuys += 1;
+          } 
+          // Short expiration = lease
+          else if (record.expiresAt <= tenYearsFromNow) {
+            stats.activeLeases += 1;
+          } 
+          // Very far future expiration = permabuy
+          else {
+            stats.activePermabuys += 1;
+          }
+        }
+        
+        // Calculate monthly data for growth rate
+        const recordDate = new Date(timestamp);
+        const thisMonth = new Date();
+        const lastMonth = new Date();
+        lastMonth.setMonth(lastMonth.getMonth() - 1);
+        
+        // Current month registrations
+        if (recordDate.getMonth() === thisMonth.getMonth() && recordDate.getFullYear() === thisMonth.getFullYear()) {
+          currentMonthRegistrations++;
+        }
+        // Previous month registrations
+        else if (recordDate.getMonth() === lastMonth.getMonth() && recordDate.getFullYear() === lastMonth.getFullYear()) {
+          previousMonthRegistrations++;
+        }
+        // Trends (by date string)
+        const date = new Date(record.startTimestamp ?? 0).toISOString().split('T')[0];
+        const idx = trends.findIndex((t: any) => t.date === date);
+        if (idx === -1) trends.push({ date, count: 1 });
+        else trends[idx].count++;
+        // Price history (by month)
+        const month = date.slice(0, 7);
+        const price = parseFloat(record.purchasePrice) || 0;
+        if (price > 0) {
+          totalPrice += price;
+          priceCount++;
+        }
+        if (!priceMap.has(month)) priceMap.set(month, { sum: 0, count: 0 });
+        const entry = priceMap.get(month)!;
+        entry.sum += price;
+        entry.count += 1;
+      }
+      processed += chunk.length;
+      self.postMessage({ type: 'RESOLUTION_PROGRESS', current: processed, total: records.length });
+    }
+    priceHistory = Array.from(priceMap.entries()).map(([month, { sum, count }]) => ({ month, average: count ? sum / count : 0 }));
+    priceHistory.sort((a, b) => a.month.localeCompare(b.month));
+    trends.sort((a, b) => a.date.localeCompare(b.date));
+    
+    // Calculate average price
+    stats.averagePrice = priceCount > 0 ? totalPrice / priceCount : 0;
+    
+    // Set unique owners count
+    stats.uniqueOwners = uniqueOwnersSet.size;
+    
+    // Calculate growth rate (percentage change between current and previous month)
+    if (previousMonthRegistrations > 0) {
+      stats.growthRate = ((currentMonthRegistrations - previousMonthRegistrations) / previousMonthRegistrations) * 100;
+    } else if (currentMonthRegistrations > 0) {
+      stats.growthRate = 100; // If no previous month data but current month has registrations, 100% growth
+    } else {
+      stats.growthRate = 0; // No growth if no registrations
+    }
+    
+    // Log debug counters
+    console.log('Debug time-based counts:', {
+      last24h,
+      last7d,
+      last30d,
+      dailyRegistrations: stats.dailyRegistrations,
+      weeklyRegistrations: stats.weeklyRegistrations,
+      monthlyRegistrations: stats.monthlyRegistrations,
+      yearlyRegistrations: stats.yearlyRegistrations,
+      now: new Date(now).toISOString(),
+      oneDay,
+      oneWeek,
+      oneMonth
+    });
+    
+    // Log type counts
+    console.log('Record type summary:', {
+      totalRecords: stats.totalRegistrations,
+      activePermabuys: stats.activePermabuys,
+      activeLeases: stats.activeLeases,
+      uniqueOwners: stats.uniqueOwners,
+      missingType: stats.totalRegistrations - (stats.activePermabuys + stats.activeLeases),
+      typeDistribution: typeCount,
+      nullTypeCount,
+      undefinedTypeCount
+    });
+    
+    self.postMessage({ type: 'ANALYTICS_STATS', stats, trends, priceHistory });
+
+  } catch (e) {
+    self.postMessage({ type: 'RESOLUTION_ERROR', name: 'analytics', error: (e as Error).message });
+  }
+}
+
+// Top holders: heavy aggregation with progress
+async function calculateTopHoldersInWorker(records: any[]) {
+  try {
+    const chunkSize = 500;
+    let processed = 0;
+    const holderMap: Record<string, { count: number; value: number }> = {};
+    let totalNames = 0;
+    for (let i = 0; i < records.length; i += chunkSize) {
+      const chunk = records.slice(i, i + chunkSize);
+      for (const record of chunk) {
+        const owner = record.owner || 'unknown';
+        const price = typeof record.purchasePrice === 'string' ? parseFloat(record.purchasePrice) : (record.purchasePrice || 0);
+        if (!holderMap[owner]) {
+          holderMap[owner] = { count: 0, value: 0 };
+        }
+        holderMap[owner].count += 1;
+        holderMap[owner].value += price || 0;
+        totalNames += 1;
+      }
+      processed += chunk.length;
+      self.postMessage({ type: 'RESOLUTION_PROGRESS', current: processed, total: records.length });
+    }
+    const holders = Object.entries(holderMap)
+      .map(([address, { count, value }]) => ({
+        address,
+        count,
+        value,
+        percentage: (count / totalNames) * 100,
+      }))
+      .sort((a, b) => b.count - a.count)
+      .slice(0, 10);
+    self.postMessage({ type: 'TOP_HOLDERS', holders });
+  } catch (e) {
+    self.postMessage({ type: 'RESOLUTION_ERROR', name: 'topHolders', error: (e as Error).message });
+  }
+}
+
+function filterRecords(records: any[], search: any): any[] {
+  const term = (typeof search === 'string' ? search : '').toLowerCase();
+  return records.filter(r =>
+    (r.name ?? '').toLowerCase().includes(term) ||
+    (r.owner ?? '').toLowerCase().includes(term) ||
+    (Array.isArray(r.tags) ? r.tags.join(' ').toLowerCase().includes(term) : false)
+  );
+}
+
+function sortAndPaginate(records: any[], sortBy: string, sortDirection: 'asc' | 'desc', page: number, perPage: number) {
+  // Debug info
+  self.postMessage({
+    type: 'DEBUG_SORT_PAGINATE',
+    recordsLength: records.length,
+    sortBy,
+    sortDirection,
+    page,
+    perPage,
+    start: (page - 1) * perPage,
+    end: (page - 1) * perPage + perPage,
+    firstRecord: records[0] || null
+  });
+  const sorted = records.slice().sort((a, b) => {
+    let cmp = 0;
+    if (sortBy === 'registeredAt') cmp = ((a.registeredAt ?? a.startTimestamp ?? 0) - (b.registeredAt ?? b.startTimestamp ?? 0));
+    else if (sortBy === 'expiresAt') cmp = (a.expiresAt ?? 0) - (b.expiresAt ?? 0);
+    else if (sortBy === 'price') cmp = (parseFloat(a.price || '0') - parseFloat(b.price || '0'));
+    else if (sortBy === 'name') cmp = (a.name ?? '').localeCompare(b.name ?? '');
+    else if (sortBy === 'owner') cmp = (a.owner ?? '').localeCompare(b.owner ?? '');
+    return sortDirection === 'desc' ? -cmp : cmp;
+  });
+  const total = sorted.length;
+  const start = (page - 1) * perPage;
+  const end = start + perPage;
+  return { records: sorted.slice(start, end), total };
+}
+
+self.onmessage = async (e: MessageEvent<WorkerRequest>) => {
+  const msg = e.data;
+  if (msg.type === 'RESOLVE_OWNERS') {
+    const resolved = await resolveOwners(msg.records);
+    self.postMessage({ type: 'RESOLVED_OWNERS', records: resolved } as WorkerResponse);
+  } else if (msg.type === 'RESOLVE_OWNERS_BATCH') {
+    const resolvedBatch = await resolveOwnersBatch(msg.records);
+    self.postMessage({ type: 'RESOLVED_OWNERS_BATCH', records: resolvedBatch } as WorkerResponse);
+  } else if (msg.type === 'FILTER_RECORDS') {
+    const filtered = filterRecords(msg.records, msg.search);
+    self.postMessage({ type: 'FILTERED_RECORDS', records: filtered } as WorkerResponse);
+  } else if (msg.type === 'SORT_AND_PAGINATE_RECORDS') {
+    let filtered = msg.records;
+    if (msg.search) {
+      filtered = filterRecords(filtered, msg.search);
+    }
+    const { records, total } = sortAndPaginate(filtered, msg.sortBy, msg.sortDirection, msg.page, msg.perPage);
+    self.postMessage({ type: 'SORTED_PAGINATED_RECORDS', records, total } as WorkerResponse);
+  } else if (msg.type === 'CALCULATE_ANALYTICS_STATS') {
+    await calculateAnalyticsStatsInWorker(msg.records);
+  } else if (msg.type === 'CALCULATE_TOP_HOLDERS') {
+    await calculateTopHoldersInWorker(msg.records);
+  }
+};
