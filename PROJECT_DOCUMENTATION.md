@@ -1,4 +1,4 @@
-# ArNS Explorer Documentation
+# OMNIS - ArNS Explorer Documentation
 
 ## Table of Contents
 1. [Introduction](#introduction)
@@ -28,7 +28,7 @@
 ---
 
 ## Introduction
-ArNS Explorer is a React+TypeScript web application for browsing, filtering, and resolving ArNS name records. It showcases a directory of records, a live feed, and analytics, while offloading intensive tasks to a Web Worker and persisting data via IndexedDB.
+OMNIS - ArNS Explorer is a React+TypeScript web application for browsing, filtering, and resolving ArNS name records. It showcases a directory of records, a live feed, and analytics, while offloading intensive tasks to a Web Worker and persisting data via IndexedDB.
 
 ## Technology Stack
 - React with TypeScript
