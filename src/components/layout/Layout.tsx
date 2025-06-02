@@ -14,6 +14,8 @@ const Layout: React.FC = () => {
 
   useEffect(() => {
     const unsubProgress = onResolutionProgress((cur, total, name) => {
+      // Clear error on new progress to resume status updates
+      setOwnerResolveError(null);
       setOwnerResolveProgress({ cur, total });
       setResolvingOwners(cur < total);
       setCurrentResolvingName(name || null);

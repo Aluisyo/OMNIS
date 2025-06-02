@@ -1,16 +1,12 @@
 import React, { createContext, useContext, useEffect, useState, useCallback } from 'react';
 import toast from 'react-hot-toast';
-import { getArNSRecords } from '../services/arnsService';
+import { fetchAndStoreAllArNS } from '../services/arnsService';
+import { fetchAndMapArns } from '../services/arnsFetchService';
 import { 
   requestNotificationPermission, 
   notificationsSupported, 
   showRegistrationNotification 
 } from '../services/notificationService';
-import { ARIO } from '@ar.io/sdk';
-import { ArNSNameResolutionData } from '../types/ArNSNameResolutionData';
-
-// Initialize ARIO client for ArNS functionality
-const ario = ARIO.mainnet();
 
 interface NotificationContextType {
   notificationsEnabled: boolean;
@@ -71,6 +67,11 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
     setPermissionChecked(true);
   }, []);
 
+  // Initial seed of full ArNS DB
+  useEffect(() => {
+    fetchAndStoreAllArNS().catch(err => console.error('Failed to seed ArNS DB:', err));
+  }, []);
+
   // Toggle auto-refresh
   const toggleAutoRefresh = () => {
     setAutoRefreshEnabled(prev => {
@@ -80,7 +81,6 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
     });
   };
 
-
   // Fetch records and update state
   const fetchLatestRegistrations = useCallback(async (isManual: boolean = false) => {
     if (isLoading) return;
@@ -88,43 +88,8 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
     try {
       setIsLoading(true);
       
-      const result = await getArNSRecords({
-        cursor: undefined, // Always fetch the latest
-        limit: 30,
-        sortBy: 'startTimestamp',
-        sortOrder: 'desc',
-      });
+      const { items: mappedItems } = await fetchAndMapArns(undefined, 30);
       
-      // Map SDK records to ArNSRecord, fetching full record via ARIO
-      const mappedItems = await Promise.all(result.items.map(async (item: any) => {
-        let record: ArNSNameResolutionData | undefined;
-        try {
-          const resolved = await ario.resolveArNSName({ name: item.name });
-          record = resolved as ArNSNameResolutionData;
-        } catch (e) {
-          console.warn(`Failed to resolve ArNS name for ${item.name}:`, e);
-          record = undefined;
-        }
-        
-        return {
-          id: item.name || '',
-          name: item.name || '',
-          processId: record?.processId ?? item.processId ?? '',
-          purchasePrice: record?.purchasePrice ?? item.purchasePrice,
-          startTimestamp: record?.startTimestamp ?? item.startTimestamp,
-          type: record?.type ?? item.type,
-          undernames: record?.undernames ?? item.undernames,
-          expiresAt: (record?.type === 'lease' ? record?.endTimestamp : undefined) ?? (item.type === 'lease' ? item.endTimestamp : null),
-          price: (record?.purchasePrice !== undefined ? record.purchasePrice?.toString() : undefined) ?? (item.purchasePrice !== undefined ? item.purchasePrice?.toString() : ''),
-          contractTxId: record?.processId ?? item.processId,
-          title: record?.title ?? item.title,
-          description: record?.description ?? item.description,
-          category: record?.category ?? item.category,
-          tags: record?.tags ?? item.tags,
-          owner: record?.owner ?? item.owner ?? '',
-        };
-      }));
-
       // Check for new registrations and trigger notifications if enabled
       if (mappedItems.length > 0) {
         // Get the latest timestamp from the current data

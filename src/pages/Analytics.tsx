@@ -1,10 +1,12 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { motion } from 'framer-motion';
 import {
   LineChart,
   Line,
   BarChart,
   Bar,
+  AreaChart,
+  Area,
   XAxis,
   YAxis,
   CartesianGrid,
@@ -12,10 +14,12 @@ import {
   ResponsiveContainer,
   Legend,
   Cell,
+  LabelList,
+  ReferenceLine,
   PieChart,
-  Pie,
+  Pie
 } from 'recharts';
-import { Activity, TrendingUp, Calendar, DollarSign, Users, Lock } from 'lucide-react';
+import { Activity, TrendingUp, Calendar, DollarSign, Users, Lock, RefreshCw } from 'lucide-react';
 import { Card, CardHeader, CardContent, CardTitle } from '../components/common/Card';
 import Button from '../components/common/Button';
 import { getAllArnsFromDB } from '../services/arnsService';
@@ -71,6 +75,25 @@ interface PriceHistoryItem {
   average: number;
 }
 
+// Unique owners trend item type
+interface UniqueOwnersTrendItem {
+  month: string;
+  count: number;
+}
+
+// Type breakdown item type
+interface TypeBreakdownItem {
+  month: string;
+  leases: number;
+  permabuys: number;
+}
+
+// Name length bucket item type
+interface NameLengthBucketItem {
+  bucket: string;
+  count: number;
+}
+
 const Analytics: React.FC = () => {
   const [stats, setStats] = useState<ArNSStats | null>(null);
   const [trends, setTrends] = useState<RegistrationTrend[]>([]);
@@ -80,7 +103,10 @@ const Analytics: React.FC = () => {
   const [priceHistory, setPriceHistory] = useState<PriceHistoryItem[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [registrationDistribution, setRegistrationDistribution] = useState<{ name: string; value: number }[]>([]);
-  
+  const [dailyCounts, setDailyCounts] = useState<{ date: string; count: number }[]>([]);
+  const [uniqueOwnersTrend, setUniqueOwnersTrend] = useState<UniqueOwnersTrendItem[]>([]);
+  const [typeBreakdown, setTypeBreakdown] = useState<TypeBreakdownItem[]>([]);
+  const [nameLengthBuckets, setNameLengthBuckets] = useState<NameLengthBucketItem[]>([]);
   // Add formatIO from LiveFeed
   function formatIO(winston: string | number | undefined) {
     if (!winston) return '-';
@@ -95,7 +121,7 @@ const Analytics: React.FC = () => {
 
   // Loading progress state
   const [progress, setProgress] = useState<{ current: number; total: number }>({ current: 0, total: 0 });
-  
+  // eslint-disable-next-line consistent-return
   useEffect(() => {
     let isMounted = true;
     let unsubProgress: (() => void) | undefined;
@@ -104,51 +130,39 @@ const Analytics: React.FC = () => {
     const fetchData = async () => {
       try {
         // Setup progress tracking
-        unsubProgress = onResolutionProgress(({ current, total }) => {
+        unsubProgress = onResolutionProgress((current, total) => {
           if (isMounted) setProgress({ current, total });
         });
 
         console.log('Fetching ArNS records from IndexedDB...');
         const allRecords = await getAllArnsFromDB();
         console.log(`Loaded ${allRecords.length} records from IndexedDB`);
-        
         // Process data in web worker
         console.log('Calculating analytics stats in worker...');
-        const { stats: statsResult, trends: trendsResult, priceHistory: priceHistoryResult } = 
-          await calculateAnalyticsStatsInWorker(allRecords);
-        
+        const { stats: statsResult, trends: trendsResult, priceHistory: priceHistoryResult, uniqueOwnersTrend: uot, dailyCounts: dc, typeBreakdown: tbd, nameLengthBuckets: nlb } = await calculateAnalyticsStatsInWorker(allRecords);
         // Calculate registration type distribution using the same logic as arnsWorker.ts
         const now = new Date().getTime();
         const tenYearsFromNow = now + (10 * 365 * 24 * 60 * 60 * 1000);
-        
-        console.log(`Total records: ${allRecords.length}`);
-        
         // Count active leases and permabuys using the exact same logic as the worker
         let activeLeases = 0;
         let activePermabuys = 0;
-        
         // Log a few records for debugging
         if (allRecords.length > 0) {
           console.log('Sample record:', allRecords[0]);
         }
-        
         allRecords.forEach(record => {
           // First normalize the type field for case-insensitive comparison
           const normalizedType = record.type ? String(record.type).toLowerCase() : '';
-          
           // Check for permabuy variations in the type field
           if (normalizedType.includes('perma') || normalizedType === 'permanent') {
             activePermabuys += 1;
-          } 
-          // Check for lease variations in the type field
-          else if (normalizedType.includes('lease') || normalizedType === 'temporary') {
+          } else if (normalizedType.includes('lease') || normalizedType === 'temporary') {
             // For leases, only count if not expired
             if (!record.expiresAt || record.expiresAt > now) {
               activeLeases += 1;
             }
-          } 
-          // If type doesn't help, use expiration date as fallback
-          else {
+          } else {
+            // If type doesn't help, use expiration date as fallback
             // If endTimestamp exists, it's likely a lease
             if (record.endTimestamp && record.endTimestamp > 0 && record.endTimestamp > now) {
               activeLeases += 1;
@@ -156,22 +170,16 @@ const Analytics: React.FC = () => {
             // No expiration date typically means permabuy
             else if (record.expiresAt === null || record.expiresAt === undefined) {
               activePermabuys += 1;
-            } 
-            // Short expiration = lease (if not expired)
-            else if (record.expiresAt <= tenYearsFromNow) {
+            } else if (record.expiresAt <= tenYearsFromNow) {
               if (record.expiresAt > now) {
                 activeLeases += 1;
               }
-            } 
-            // Very far future expiration = permabuy
-            else {
+            } else {
               activePermabuys += 1;
             }
           }
         });
-        
         console.log(`Active leases: ${activeLeases}, Active permabuys: ${activePermabuys}`);
-        
         const distribution = [
           { name: 'Active Leases', value: activeLeases },
           { name: 'Permabuys', value: activePermabuys }
@@ -180,9 +188,13 @@ const Analytics: React.FC = () => {
         if (isMounted) {
           console.log('Setting analytics data to state...');
           setStats(statsResult);
-          setTrends(trendsResult);
-          setPriceHistory(priceHistoryResult);
+          setTrends(trendsResult.filter(trend => trend.date !== '2024-12-26' && trend.date !== '2025-02-20'));
+          setPriceHistory(priceHistoryResult.filter(item => item.month !== '2024-12' && item.month !== '2025-02'));
           setRegistrationDistribution(distribution);
+          setDailyCounts(dc.filter(d => d.date !== '2024-12-26' && d.date !== '2025-02-20'));
+          setUniqueOwnersTrend(uot.filter(item => item.month !== '2024-12' && item.month !== '2025-02'));
+          setTypeBreakdown(tbd.filter(item => item.month !== '2024-12' && item.month !== '2025-02'));
+          setNameLengthBuckets(nlb);
           setLoading(false);
         }
       } catch (err) {
@@ -208,10 +220,8 @@ const Analytics: React.FC = () => {
   // Calculate filtered trends based on time range
   const filteredTrends = () => {
     if (!trends || trends.length === 0) return [];
-    
     const today = new Date();
     let cutoff = new Date(today);
-    
     switch (timeRange) {
       case 'week':
         cutoff.setDate(today.getDate() - 7);
@@ -225,31 +235,22 @@ const Analytics: React.FC = () => {
       default:
         cutoff.setMonth(today.getMonth() - 1); // Default to month
     }
-    
-    return trends.filter(t => new Date(t.date) >= cutoff);
+    return trends.filter(t => new Date(t.date) >= cutoff && t.date !== '2024-12-26' && t.date !== '2025-02-20');
   };
 
   // Calculate growth rate using worker data
   const calculateGrowth = () => {
     if (!stats) return { growth: 0, growthStr: '0%' };
-    
-    // Use the growth rate directly from the worker calculation
-    // The worker calculates this as percentage change between current and previous month
     const growth = stats.growthRate !== undefined ? stats.growthRate : 0;
-    
-    // Format with 1 decimal place and % sign
     const growthStr = growth.toFixed(1) + '%';
-    
     return { growth, growthStr };
   };
 
   // Generate real monthly growth rate data for the chart
   const generateMonthlyGrowthData = (): GrowthRateItem[] => {
     if (!trends || trends.length === 0) return [];
-    
-    // Group trends by month
     const monthlyData = new Map<string, number>();
-    trends.forEach(trend => {
+    trends.filter(trend => trend.date !== '2024-12-26' && trend.date !== '2025-02-20').forEach(trend => {
       const month = trend.date.substring(0, 7); // Get YYYY-MM format
       const count = trend.count || 0;
       if (monthlyData.has(month)) {
@@ -258,41 +259,49 @@ const Analytics: React.FC = () => {
         monthlyData.set(month, count);
       }
     });
-    
-    // Convert to array and sort by month
     const sortedMonths = Array.from(monthlyData.entries())
       .sort((a, b) => a[0].localeCompare(b[0]));
-    
-    // Calculate growth rates between consecutive months
     const growthData: GrowthRateItem[] = [];
     for (let i = 1; i < sortedMonths.length; i++) {
       const prevMonth = sortedMonths[i-1];
       const currMonth = sortedMonths[i];
       const prevCount = prevMonth[1];
       const currCount = currMonth[1];
-      
       let growth = 0;
       if (prevCount > 0) {
         growth = ((currCount - prevCount) / prevCount) * 100;
       } else if (currCount > 0) {
         growth = 100; // If previous month was 0, but current month has registrations
       }
-      
-      // Format month for display (e.g., "2025-05" to "May")
       const monthDate = new Date(currMonth[0] + '-01');
       const monthName = monthDate.toLocaleString('default', { month: 'short' });
-      
       growthData.push({
         month: monthName,
         growth: Number(growth.toFixed(1))
       });
     }
-    
     return growthData.length > 0 ? growthData : [{ month: 'Current', growth: stats?.growthRate || 0 }];
   };
-  
-  // Get real growth rate data
   const growthRateData = generateMonthlyGrowthData();
+
+  // Data for monthly registration distribution bar chart
+  const registrationBarData = React.useMemo(() => {
+    const map: { [key: string]: number } = {};
+    trends.filter(trend => trend.date !== '2024-12-26' && trend.date !== '2025-02-20').forEach(({ date, count }) => {
+      const month = date.slice(0, 7);
+      map[month] = (map[month] || 0) + count;
+    });
+    return Object.entries(map).map(([month, count]) => ({ month, count }));
+  }, [trends]);
+
+  // Filter and sort daily counts for the past year
+  const filteredDailyCounts = useMemo(() => {
+    const oneYearAgo = new Date();
+    oneYearAgo.setFullYear(oneYearAgo.getFullYear() - 1);
+    return dailyCounts
+      .filter(d => new Date(d.date).getTime() >= oneYearAgo.getTime() && d.date !== '2024-12-26' && d.date !== '2025-02-20')
+      .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+  }, [dailyCounts]);
 
   // Animation variants
   const pageVariants = {
@@ -310,7 +319,7 @@ const Analytics: React.FC = () => {
     hidden: { opacity: 0, y: 20 },
     visible: { opacity: 1, y: 0, transition: { duration: 0.4 } }
   };
-  
+
   return (
     <motion.div 
       className="space-y-8"
@@ -609,7 +618,15 @@ const Analytics: React.FC = () => {
               >
                 <Card className="bg-white/70 dark:bg-dark-100/40 backdrop-blur-sm border border-gray-200/50 dark:border-white/5 shadow-sm hover:shadow-md transition-all duration-200">
                   <CardHeader className="p-4 flex flex-row items-center justify-between space-y-0 pb-2">
-                    <CardTitle className="text-sm font-medium">Unique Owners</CardTitle>
+                    <div className="flex items-center space-x-2">
+                      <CardTitle className="text-sm font-medium">Unique Owners</CardTitle>
+                      {progress.total > 0 && progress.current < progress.total && (
+                        <span className="flex items-center space-x-1 text-xs text-cyan-600 dark:text-cyan-400">
+                          <RefreshCw className="h-4 w-4 animate-spin" />
+                          <span>Syncing...</span>
+                        </span>
+                      )}
+                    </div>
                     <div className="h-8 w-8 rounded-full bg-cyan-100/80 dark:bg-cyan-900/30 flex items-center justify-center">
                       <Users className="h-4 w-4 text-cyan-600 dark:text-cyan-400" />
                     </div>
@@ -757,14 +774,15 @@ const Analytics: React.FC = () => {
                           }}
                           formatter={(value) => [formatNumber(value as number), 'Registrations']}
                           contentStyle={{
-                            backgroundColor: 'rgba(255, 255, 255, 0.9)',
-                            border: '1px solid #ccc',
+                            backgroundColor: 'rgba(255,255,255,0.95)',
+                            border: '1px solid #ddd',
                             borderRadius: '4px',
-                            padding: '10px',
-                            boxShadow: '2px 2px 6px rgba(0, 0, 0, 0.1)'
+                            padding: '8px',
+                            boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
+                            color: '#000'
                           }}
-                          itemStyle={{ padding: '4px 0' }}
-                          wrapperStyle={{ zIndex: 100 }}
+                          labelStyle={{ color: '#333' }}
+                          itemStyle={{ color: '#000' }}
                         />
                         <Legend verticalAlign="top" height={36} />
                         <Line
@@ -801,29 +819,33 @@ const Analytics: React.FC = () => {
                         data={growthRateData}
                         margin={{ top: 10, right: 30, left: 10, bottom: 30 }}
                       >
-                        <CartesianGrid strokeDasharray="3 3" />
+                        <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                        <ReferenceLine y={0} stroke="#666" strokeDasharray="3 3" />
                         <XAxis 
                           dataKey="month" 
                           minTickGap={30}
                         />
                         <YAxis 
+                          tickFormatter={(val) => `${val}%`} 
                           label={{ value: 'Growth %', angle: -90, position: 'insideLeft' }}
                         />
                         <Tooltip 
                           formatter={(value) => [`${value}%`, 'Growth Rate']}
                           contentStyle={{
-                            backgroundColor: 'rgba(255, 255, 255, 0.9)',
-                            border: '1px solid #ccc',
+                            backgroundColor: 'rgba(255,255,255,0.95)',
+                            border: '1px solid #ddd',
                             borderRadius: '4px',
-                            padding: '10px',
-                            boxShadow: '2px 2px 6px rgba(0, 0, 0, 0.1)'
+                            padding: '8px',
+                            boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
+                            color: '#000'
                           }}
+                          labelStyle={{ color: '#333' }}
+                          itemStyle={{ color: '#000' }}
                         />
                         <Legend verticalAlign="top" height={36} />
                         <Bar 
                           dataKey="growth" 
                           name="Monthly Growth Rate" 
-                          fill="#8884d8"
                           radius={[5, 5, 0, 0]}
                         >
                           {growthRateData.map((entry, index) => (
@@ -831,6 +853,95 @@ const Analytics: React.FC = () => {
                               key={`cell-${index}`} 
                               fill={entry.growth >= 0 ? '#10b981' : '#ef4444'} 
                             />
+                          ))}
+                          <LabelList dataKey="growth" position="top" formatter={(val: number) => `${val}%`} style={{ fill: '#333', fontSize: 12 }} />
+                        </Bar>
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </div>
+                </CardContent>
+              </Card>
+            </motion.div>
+
+            {/* Daily Registrations Chart */}
+            <motion.div variants={itemVariants} initial="hidden" animate="visible" className="mt-6">
+              <Card className="bg-white/70 dark:bg-dark-100/40 backdrop-blur-sm border border-gray-200/50 dark:border-white/5 shadow-sm hover:shadow-md transition-all duration-200">
+                <CardHeader className="flex justify-between items-center p-4 border-b border-gray-100/50 dark:border-gray-800/50">
+                  <CardTitle className="text-lg font-semibold bg-gradient-to-r from-primary-600 to-primary-400 dark:from-accent-blue dark:to-accent-lavender bg-clip-text text-transparent">
+                    Daily Registrations
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="p-4">
+                  <div className="h-[300px] w-full">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <BarChart data={filteredDailyCounts} margin={{ top: 10, right: 30, left: 0, bottom: 30 }}>
+                        <CartesianGrid strokeDasharray="3 3" />
+                        <XAxis
+                          dataKey="date"
+                          tickFormatter={date => new Date(date).toLocaleDateString('default', { month: 'short', day: 'numeric' })}
+                          interval={Math.floor(filteredDailyCounts.length / 7)}
+                          minTickGap={10}
+                          tick={{ fontSize: 12 }}
+                        />
+                        <YAxis />
+                        <Tooltip 
+                          formatter={(value) => [formatNumber(value as number), 'Registrations']}
+                          contentStyle={{
+                            backgroundColor: 'rgba(255,255,255,0.95)',
+                            border: '1px solid #ddd',
+                            borderRadius: '4px',
+                            padding: '8px',
+                            boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
+                            color: '#000'
+                          }}
+                          labelStyle={{ color: '#333' }}
+                          itemStyle={{ color: '#000' }}
+                        />
+                        <Bar dataKey="count" fill="#3b82f6" name="Registrations" />
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </div>
+                </CardContent>
+              </Card>
+            </motion.div>
+
+            {/* Monthly Registration Distribution Bar Chart */}
+            <motion.div
+              variants={itemVariants}
+              initial="hidden"
+              animate="visible"
+              className="mt-6"
+            >
+              <Card className="bg-white/70 dark:bg-dark-100/40 backdrop-blur-sm border border-gray-200/50 dark:border-white/5 shadow-sm hover:shadow-md transition-all duration-200">
+                <CardHeader className="flex justify-between items-center p-4 border-b border-gray-100/50 dark:border-gray-800/50">
+                  <CardTitle className="text-lg font-semibold bg-gradient-to-r from-primary-600 to-primary-400 dark:from-accent-blue dark:to-accent-lavender bg-clip-text text-transparent">
+                    Registration distribution
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="p-4 pt-6">
+                  <div className="h-[300px] md:h-[400px] w-full">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <BarChart data={registrationBarData} margin={{ top: 10, right: 30, left: 10, bottom: 30 }}>
+                        <CartesianGrid strokeDasharray="3 3" />
+                        <XAxis dataKey="month" />
+                        <YAxis />
+                        <Tooltip 
+                          formatter={(value) => [formatNumber(value as number), 'Registrations']}
+                          contentStyle={{
+                            backgroundColor: 'rgba(255,255,255,0.95)',
+                            border: '1px solid #ddd',
+                            borderRadius: '4px',
+                            padding: '8px',
+                            boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
+                            color: '#000'
+                          }}
+                          labelStyle={{ color: '#333' }}
+                          itemStyle={{ color: '#000' }}
+                        />
+                        <Legend verticalAlign="top" height={36} />
+                        <Bar dataKey="count" name="Registrations" fill="#3b82f6" radius={[5,5,0,0]}>
+                          {registrationBarData.map((entry, index) => (
+                            <Cell key={`cell-${index}`} fill="#3b82f6" />
                           ))}
                         </Bar>
                       </BarChart>
@@ -851,7 +962,7 @@ const Analytics: React.FC = () => {
               >
                 <Card className="bg-white/70 dark:bg-dark-100/40 backdrop-blur-sm border border-gray-200/50 dark:border-white/5 shadow-sm hover:shadow-md transition-all duration-200">
                   <CardHeader className="flex flex-row items-center justify-between p-4 border-b border-gray-100/50 dark:border-gray-800/50">
-                    <CardTitle className="text-lg font-semibold bg-gradient-to-r from-primary-600 to-primary-400 dark:from-accent-blue dark:to-accent-lavender bg-clip-text text-transparent">Registration Distribution</CardTitle>
+                    <CardTitle className="text-lg font-semibold bg-gradient-to-r from-primary-600 to-primary-400 dark:from-accent-blue dark:to-accent-lavender bg-clip-text text-transparent">Leases and Permabuys</CardTitle>
                     <Button
                       variant="ghost"
                       size="sm"
@@ -877,7 +988,6 @@ const Analytics: React.FC = () => {
                             labelLine={false}
                           >
                             {registrationDistribution.map((entry, index) => {
-                              // Use the same colors as the stat cards for consistency
                               let fillColor;
                               if (entry.name === 'Active Leases') {
                                 fillColor = '#f97316'; // Orange for leases (matches Active Leases card)
@@ -896,12 +1006,15 @@ const Analytics: React.FC = () => {
                           <Tooltip 
                             formatter={(value) => [formatNumber(value as number), 'Registrations']}
                             contentStyle={{
-                              backgroundColor: 'rgba(255, 255, 255, 0.9)',
-                              border: '1px solid #ccc',
+                              backgroundColor: 'rgba(255,255,255,0.95)',
+                              border: '1px solid #ddd',
                               borderRadius: '4px',
-                              padding: '10px',
-                              boxShadow: '2px 2px 6px rgba(0, 0, 0, 0.1)'
+                              padding: '8px',
+                              boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
+                              color: '#000'
                             }}
+                            labelStyle={{ color: '#333' }}
+                            itemStyle={{ color: '#000' }}
                           />
                           <Legend verticalAlign="bottom" height={36} />
                         </PieChart>
@@ -934,7 +1047,7 @@ const Analytics: React.FC = () => {
                     <div className="h-64 w-full opacity-90 dark:opacity-100">
                       <ResponsiveContainer width="100%" height="100%">
                         <LineChart
-                          data={priceHistory}
+                          data={priceHistory.filter(item => item.month !== '2024-12' && item.month !== '2025-02')}
                           margin={{ top: 5, right: 30, left: 20, bottom: 5 }}
                         >
                           <CartesianGrid strokeDasharray="3 3" />
@@ -944,7 +1057,17 @@ const Analytics: React.FC = () => {
                             tickFormatter={(value) => formatIO(value)}
                           />
                           <Tooltip 
-                            formatter={(value: number) => [formatIO(value), 'Average Price']}
+                            formatter={(value) => [formatIO(value as number), 'Average Price']}
+                            contentStyle={{
+                              backgroundColor: 'rgba(255,255,255,0.95)',
+                              border: '1px solid #ddd',
+                              borderRadius: '4px',
+                              padding: '8px',
+                              boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
+                              color: '#000'
+                            }}
+                            labelStyle={{ color: '#333' }}
+                            itemStyle={{ color: '#000' }}
                           />
                           <Legend />
                           <Line
@@ -962,6 +1085,117 @@ const Analytics: React.FC = () => {
                 </Card>
               </motion.div>
             </div>
+            {/* Unique Owners Trend (full width) */}
+            <motion.div variants={itemVariants} initial="hidden" animate="visible" className="mt-6 col-span-1 lg:col-span-2">
+              <Card className="bg-white/70 dark:bg-dark-100/40 backdrop-blur-sm border border-gray-200/50 dark:border-white/5 shadow-sm hover:shadow-md transition-all duration-200">
+                <CardHeader className="flex justify-between items-center p-4 border-b border-gray-100/50 dark:border-gray-800/50">
+                  <CardTitle className="text-lg font-semibold bg-gradient-to-r from-primary-600 to-primary-400 dark:from-accent-blue dark:to-accent-lavender bg-clip-text text-transparent">
+                    Unique Owners Trend
+                  </CardTitle>
+                  {progress.total > 0 && progress.current < progress.total && (
+                    <span className="ml-2 flex items-center space-x-1 text-sm text-primary-600 dark:text-primary-400">
+                      <RefreshCw className="h-4 w-4 animate-spin" />
+                      <span>Syncing...</span>
+                    </span>
+                  )}
+                </CardHeader>
+                <CardContent className="p-4">
+                  <div className="h-[300px] md:h-[400px] w-full">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <LineChart data={uniqueOwnersTrend.filter(item => item.month !== '2024-12' && item.month !== '2025-02')}>
+                        <CartesianGrid strokeDasharray="3 3" />
+                        <XAxis dataKey="month" />
+                        <YAxis />
+                        <Tooltip 
+                          contentStyle={{
+                            backgroundColor: 'rgba(255,255,255,0.95)',
+                            border: '1px solid #ddd',
+                            borderRadius: '4px',
+                            padding: '8px',
+                            boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
+                            color: '#000'
+                          }}
+                          labelStyle={{ color: '#333' }}
+                          itemStyle={{ color: '#000' }}
+                        />
+                        <Legend />
+                        <Line type="monotone" dataKey="count" name="Unique Owners" stroke="#6366f1" strokeWidth={2} dot={{ r: 4 }} />
+                      </LineChart>
+                    </ResponsiveContainer>
+                  </div>
+                </CardContent>
+              </Card>
+            </motion.div>
+            {/* Combined Charts: Type Breakdown */}
+            <motion.div variants={itemVariants} initial="hidden" animate="visible" className="mt-6 col-span-1 lg:col-span-2">
+              <Card className="bg-white/70 dark:bg-dark-100/40 backdrop-blur-sm border border-gray-200/50 dark:border-white/5 shadow-sm hover:shadow-md transition-all duration-200">
+                <CardHeader className="flex justify-between items-center p-4 border-b border-gray-100/50 dark:border-gray-800/50">
+                  <CardTitle className="text-lg font-semibold bg-gradient-to-r from-primary-600 to-primary-400 dark:from-accent-blue dark:to-accent-lavender bg-clip-text text-transparent">
+                    Type Breakdown Over Time
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="p-4">
+                  <div className="h-[300px] md:h-[400px] w-full">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <AreaChart data={typeBreakdown.filter(item => item.month !== '2024-12' && item.month !== '2025-02')} margin={{ top: 10, right: 30, left: 0, bottom: 30 }}>
+                        <CartesianGrid strokeDasharray="3 3" />
+                        <XAxis dataKey="month" />
+                        <YAxis />
+                        <Tooltip 
+                          contentStyle={{
+                            backgroundColor: 'rgba(255,255,255,0.95)',
+                            border: '1px solid #ddd',
+                            borderRadius: '4px',
+                            padding: '8px',
+                            boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
+                            color: '#000'
+                          }}
+                          labelStyle={{ color: '#333' }}
+                          itemStyle={{ color: '#000' }}
+                        />
+                        <Legend />
+                        <Area type="monotone" dataKey="leases" stackId="1" name="Leases" stroke="#f97316" fill="#f97316" />
+                        <Area type="monotone" dataKey="permabuys" stackId="1" name="Permabuys" stroke="#6366f1" fill="#6366f1" />
+                      </AreaChart>
+                    </ResponsiveContainer>
+                  </div>
+                </CardContent>
+              </Card>
+            </motion.div>
+            {/* Name Length Buckets */}
+            <motion.div variants={itemVariants} initial="hidden" animate="visible" className="mt-6">
+              <Card className="bg-white/70 dark:bg-dark-100/40 backdrop-blur-sm border border-gray-200/50 dark:border-white/5 shadow-sm hover:shadow-md transition-all duration-200">
+                <CardHeader className="flex justify-between items-center p-4 border-b border-gray-100/50 dark:border-gray-800/50">
+                  <CardTitle className="text-lg font-semibold bg-gradient-to-r from-primary-600 to-primary-400 dark:from-accent-blue dark:to-accent-lavender bg-clip-text text-transparent">
+                    Name Length Buckets
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="p-4">
+                  <div className="h-[300px] md:h-[400px] w-full">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <BarChart data={nameLengthBuckets} margin={{ top: 10, right: 30, left: 10, bottom: 30 }}>
+                        <CartesianGrid strokeDasharray="3 3" />
+                        <XAxis dataKey="bucket" />
+                        <YAxis />
+                        <Tooltip 
+                          contentStyle={{
+                            backgroundColor: 'rgba(255,255,255,0.95)',
+                            border: '1px solid #ddd',
+                            borderRadius: '4px',
+                            padding: '8px',
+                            boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
+                            color: '#000'
+                          }}
+                          labelStyle={{ color: '#333' }}
+                          itemStyle={{ color: '#000' }}
+                        />
+                        <Bar dataKey="count" fill="#8b5cf6" name="Count" />
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </div>
+                </CardContent>
+              </Card>
+            </motion.div>
           </div>
         </div>
       )}

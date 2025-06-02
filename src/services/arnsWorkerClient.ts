@@ -62,13 +62,23 @@ export function resolveOwnersBatchInWorker(records: any[]): Promise<any[]> {
  * Offload analytics stats calculation to the worker. Returns { stats, trends, priceHistory }.
  * Progress and error events are sent to subscribers.
  */
-export function calculateAnalyticsStatsInWorker(records: any[]): Promise<{ stats: any; trends: any; priceHistory: any }> {
+export function calculateAnalyticsStatsInWorker(records: any[]): Promise<{ stats: any; trends: any; priceHistory: any; uniqueOwnersTrend: { month: string; count: number }[]; priceBuckets: { bucket: string; count: number }[]; dailyCounts: { date: string; count: number }[]; typeBreakdown: { month: string; leases: number; permabuys: number }[]; topDomains: { domain: string; count: number }[]; nameLengthBuckets: { bucket: string; count: number }[] }> {
   return new Promise((resolve) => {
     const w = getArnsWorker();
     const handler = (e: MessageEvent) => {
       if (e.data.type === 'ANALYTICS_STATS') {
         w.removeEventListener('message', handler);
-        resolve({ stats: e.data.stats, trends: e.data.trends, priceHistory: e.data.priceHistory });
+        resolve({
+          stats: e.data.stats,
+          trends: e.data.trends,
+          priceHistory: e.data.priceHistory,
+          uniqueOwnersTrend: e.data.uniqueOwnersTrend,
+          priceBuckets: e.data.priceBuckets,
+          dailyCounts: e.data.dailyCounts,
+          typeBreakdown: e.data.typeBreakdown,
+          topDomains: e.data.topDomains,
+          nameLengthBuckets: e.data.nameLengthBuckets
+        });
       } else if (e.data.type === 'RESOLUTION_PROGRESS') {
         progressSubscribers.forEach(fn => fn(e.data.current, e.data.total, e.data.name));
       } else if (e.data.type === 'RESOLUTION_ERROR') {

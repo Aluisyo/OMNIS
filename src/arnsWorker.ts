@@ -15,7 +15,7 @@ export type WorkerResponse =
   | { type: 'RESOLVED_OWNERS_BATCH'; records: any[] }
   | { type: 'FILTERED_RECORDS'; records: any[] }
   | { type: 'SORTED_PAGINATED_RECORDS'; records: any[]; total: number }
-  | { type: 'ANALYTICS_STATS'; stats: any; trends: any; priceHistory: any }
+  | { type: 'ANALYTICS_STATS'; stats: any; trends: any; priceHistory: any; uniqueOwnersTrend: { month: string; count: number }[]; priceBuckets: { bucket: string; count: number }[]; dailyCounts: { date: string; count: number }[]; typeBreakdown: { month: string; leases: number; permabuys: number }[]; topDomains: { domain: string; count: number }[]; nameLengthBuckets: { bucket: string; count: number }[] }
   | { type: 'TOP_HOLDERS'; holders: any[] };
 
 // Import the ARIO SDK
@@ -139,7 +139,6 @@ async function resolveOwners(records: any[]): Promise<any[]> {
 // Analytics: heavy stats/trends computation with progress
 async function calculateAnalyticsStatsInWorker(records: any[]) {
   try {
-    // Simulate chunked progress for large sets
     const chunkSize = 500;
     const stats = { 
       totalRegistrations: 0, 
@@ -182,6 +181,15 @@ async function calculateAnalyticsStatsInWorker(records: any[]) {
     const priceMap = new Map();
     let totalPrice = 0;
     let priceCount = 0;
+
+    // Extended analytics structures
+    const uniqueOwnersMap: Record<string, Set<string>> = {};
+    const priceBucketsMap: Record<string, number> = { '0-1': 0, '1-10': 0, '10-100': 0, '100+': 0 };
+    const dailyCountsMap: Record<string, number> = {};
+    const typeBreakdownMap: Record<string, { leases: number; permabuys: number }> = {};
+    const domainMap: Record<string, number> = {};
+    const nameLengthMap: Record<string, number> = {};
+
     for (let i = 0; i < records.length; i += chunkSize) {
       const chunk = records.slice(i, i + chunkSize);
       for (const record of chunk) {
@@ -321,10 +329,36 @@ async function calculateAnalyticsStatsInWorker(records: any[]) {
         const entry = priceMap.get(month)!;
         entry.sum += price;
         entry.count += 1;
+
+        // Unique owners per month
+        if (record.owner) {
+          if (!uniqueOwnersMap[month]) uniqueOwnersMap[month] = new Set();
+          uniqueOwnersMap[month].add(record.owner);
+        }
+        // Price bucket
+        const priceVal = parseFloat(record.purchasePrice) || 0;
+        let bucket = priceVal < 1 ? '0-1' : priceVal < 10 ? '1-10' : priceVal < 100 ? '10-100' : '100+';
+        priceBucketsMap[bucket]++;
+        // Daily counts
+        dailyCountsMap[date] = (dailyCountsMap[date] || 0) + 1;
+        // Type breakdown per month
+        if (!typeBreakdownMap[month]) typeBreakdownMap[month] = { leases: 0, permabuys: 0 };
+        const isPermabuy = normalizedType.includes('perma') || normalizedType === 'permanent' || (!record.endTimestamp && !record.expiresAt);
+        if (isPermabuy) typeBreakdownMap[month].permabuys++;
+        else typeBreakdownMap[month].leases++;
+        // Domain counts
+        const parts = record.name?.split('.') || [];
+        const tld = parts.length > 1 ? parts.pop()! : 'none';
+        domainMap[tld] = (domainMap[tld] || 0) + 1;
+        // Name length buckets
+        const len = record.name?.length || 0;
+        const lenBucket = len <= 5 ? '1-5' : len <= 10 ? '6-10' : len <= 20 ? '11-20' : '21+';
+        nameLengthMap[lenBucket] = (nameLengthMap[lenBucket] || 0) + 1;
       }
       processed += chunk.length;
       self.postMessage({ type: 'RESOLUTION_PROGRESS', current: processed, total: records.length });
     }
+
     priceHistory = Array.from(priceMap.entries()).map(([month, { sum, count }]) => ({ month, average: count ? sum / count : 0 }));
     priceHistory.sort((a, b) => a.month.localeCompare(b.month));
     trends.sort((a, b) => a.date.localeCompare(b.date));
@@ -371,8 +405,27 @@ async function calculateAnalyticsStatsInWorker(records: any[]) {
       undefinedTypeCount
     });
     
-    self.postMessage({ type: 'ANALYTICS_STATS', stats, trends, priceHistory });
-
+    // Build extended analytics arrays
+    const uniqueOwnersTrend = Object.entries(uniqueOwnersMap).map(([month, owners]) => ({ month, count: owners.size })).sort((a, b) => a.month.localeCompare(b.month));
+    const priceBuckets = Object.entries(priceBucketsMap).map(([bucket, count]) => ({ bucket, count }));
+    const dailyCounts = Object.entries(dailyCountsMap).map(([date, count]) => ({ date, count }));
+    const typeBreakdown = Object.entries(typeBreakdownMap).map(([month, { leases, permabuys }]) => ({ month, leases, permabuys })).sort((a, b) => a.month.localeCompare(b.month));
+    const topDomains = Object.entries(domainMap).map(([domain, count]) => ({ domain, count })).sort((a, b) => b.count - a.count).slice(0, 10);
+    const nameLengthBuckets = Object.entries(nameLengthMap).map(([bucket, count]) => ({ bucket, count }));
+    
+    // Send full analytics
+    self.postMessage({
+      type: 'ANALYTICS_STATS',
+      stats,
+      trends,
+      priceHistory,
+      uniqueOwnersTrend,
+      priceBuckets,
+      dailyCounts,
+      typeBreakdown,
+      topDomains,
+      nameLengthBuckets
+    });
   } catch (e) {
     self.postMessage({ type: 'RESOLUTION_ERROR', name: 'analytics', error: (e as Error).message });
   }

@@ -369,20 +369,12 @@ const Header: React.FC = () => {
           {/* Left Side: Logo and Desktop Nav */}
           <div className="flex items-center gap-2 lg:gap-8">
             <Link to="/" className="flex items-center group">
-              <motion.div
-                whileHover={{ rotate: [0, -10, 10, -5, 0], transition: { duration: 0.5 } }}
-                className="relative"
-              >
+              <motion.div whileHover={{ rotate: 360 }} transition={{ duration: 0.5 }}>
                 <OmnisLogo className="h-9 w-9" />
-                <div className="absolute inset-0 bg-gradient-to-br from-primary-400/30 to-accent-blue/30 rounded-full blur-xl opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
               </motion.div>
-              <motion.span 
-                initial={{ x: -5, opacity: 0.8 }}
-                animate={{ x: 0, opacity: 1 }}
-                className="ml-2 text-xl font-bold bg-gradient-to-r from-primary-600 to-accent-blue bg-clip-text text-transparent dark:from-accent-blue dark:to-accent-lavender"
-              >
+              <span className="ml-2 text-xl font-bold bg-gradient-to-r from-primary-600 to-accent-blue bg-clip-text text-transparent dark:from-accent-blue dark:to-accent-lavender">
                 OMNIS
-              </motion.span>
+              </span>
             </Link>
             <nav className="hidden md:flex md:space-x-2">
               <motion.div

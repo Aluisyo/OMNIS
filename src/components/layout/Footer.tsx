@@ -66,7 +66,7 @@ const Footer: React.FC = () => {
                 <span className="sr-only">Twitter</span>
               </motion.a>
               <motion.a
-                href="#"
+                href="https://github.com/Aluisyo/OMNIS"
                 whileHover={{ scale: 1.1, y: -3 }}
                 whileTap={{ scale: 0.95 }}
                 className="flex h-9 w-9 items-center justify-center rounded-full bg-gray-100 dark:bg-dark-100/60 

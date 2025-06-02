@@ -1,4 +1,4 @@
-# OMNIS - ArNS Explorer Documentation
+# ArNS Explorer Documentation
 
 ## Table of Contents
 1. [Introduction](#introduction)
@@ -9,6 +9,7 @@
 6. [Core Features](#core-features)
    - [Directory Page](#directory-page)
    - [LiveFeed Page](#livefeed-page)
+   - [Name Details Timeline](#name-details-timeline)
    - [Analytics Page](#analytics-page)
    - [Global Owner Resolution Indicator](#global-owner-resolution-indicator)
    - [CSV Export Utility](#csv-export-utility)
@@ -27,7 +28,7 @@
 ---
 
 ## Introduction
-OMNIS - ArNS Explorer is a React+TypeScript web application for browsing, filtering, and resolving ArNS name records. It showcases a directory of records, a live feed, and analytics, while offloading intensive tasks to a Web Worker and persisting data via IndexedDB.
+ArNS Explorer is a React+TypeScript web application for browsing, filtering, and resolving ArNS name records. It showcases a directory of records, a live feed, and analytics, while offloading intensive tasks to a Web Worker and persisting data via IndexedDB.
 
 ## Technology Stack
 - React with TypeScript
@@ -77,19 +78,29 @@ project/
 - High-contrast modal UI with light/dark support.
 
 ### LiveFeed Page
-- Glass-morphism styled containers.
-- Staggered table/card animations via Framer Motion.
-- Accurate `Expires` display with lease dates and “Never” badges.
-- Notification toggles and auto-refresh controls.
+- Glass-morphism styled stats cards and registrations table with backdrop blur.
+- Staggered animations for stats cards, table rows, and “Show More” button transitions.
+- Loading skeletons (pulse) for initial DB load and delta fetches, with error banners that reset on retry.
+- Accurate `Expires` display: proper dates for leases and “Never” badges for permabuys.
+- Manual pagination via stylish “Show More” button with gradient and disabled state.
+- Notification toggles and auto-refresh controls with toast feedback.
+
+### Name Details Timeline
+- Interactive timeline view for the Name Details page.
+- Glass-morphism cards with backdrop blur and animated entry.
+- Pulsing and glow effects for scheduled future events via Framer Motion.
+- Staggered appearance and hover interactions for events.
+- Responsive layout with custom date formatting and accessible tooltips.
 
 ### Analytics Page
 - Offloads analytics computations to the Web Worker.
 - Displays charts and summary statistics.
 
 ### Global Owner Resolution Indicator
-- Floating status dot at bottom-right viewport (always visible).
-- Color cycles (red → orange → green) during resolution, holds red on errors.
-- Tooltip shows context: “Resolving {name}: X of Y” or error message.
+- Floating resolution status dot at bottom-right, indicating owner resolution progress.
+- Colors: red on errors, orange during pending resolution, green on successful completion, and resets on new cycles.
+- Resolves only missing owners in IndexedDB to minimize redundant API calls, triggered via `resolveMissingOwnersInDB`.
+- Tooltip shows “Resolving owners: X of Y” progress or detailed error messages.
 - Accessible via `aria-label` and native `title`.
 
 ### CSV Export Utility
@@ -131,6 +142,7 @@ project/
 
 ## Deployment
 - Build static assets via `npm run build`.
+- Deploy to Netlify, Vercel, or any static host.
 
 ## Contributing
 1. Fork the repo and create a feature branch.
@@ -138,4 +150,4 @@ project/
 3. Submit a PR for review.
 
 ## License
-MIT
+MIT 

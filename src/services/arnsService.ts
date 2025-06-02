@@ -447,7 +447,8 @@ export async function getArNSRecords({
   };
 }
 
-import { saveRecords, getAllRecords, saveRecordsSmart } from '../utils/db'; // getAllRecords now used in getAllArnsFromDB
+import { saveRecordsSmart, getAllRecords } from '../utils/db'; // getAllRecords now used in getAllArnsFromDB
+import { resolveMissingOwnersInDB } from './arnsResolverService';
 
 export async function fetchAndStoreAllArNS() {
   let hasMore = true;
@@ -467,9 +468,10 @@ export async function fetchAndStoreAllArNS() {
   // Save all raw records to IndexedDB (use smart save to avoid erasing owners)
   await saveRecordsSmart(allRecords);
 
-  // 2. Start background resolution in batches of 50
-  // Start this asynchronously so we can return the records immediately
-  setTimeout(() => resolveAllArnsWithBackoff(allRecords), 0);
+  // 2. Queue DB-based resolution of missing owners
+  setTimeout(() => {
+    resolveMissingOwnersInDB();
+  }, 0);
 
   // Return the actual records instead of just the count
   // This allows the caller to use the records immediately
@@ -515,7 +517,6 @@ async function resolveWithBackoff(record: any, maxRetries = 5): Promise<any> {
 
 // 3. Batch resolve in the background
 import { resolveOwnersBatchInWorker } from './arnsWorkerClient';
-import { saveRecords } from '../utils/db';
 
 async function resolveAllArnsWithBackoff(records: any[]) {
   function sleep(ms: number) { return new Promise(res => setTimeout(res, ms)); }
@@ -553,4 +554,15 @@ export async function getArnsByOwner(): Promise<Record<string, any[]>> {
   return grouped;
 }
 
-
+// Resolve missing owners for records stored in IndexedDB
+export async function resolveMissingOwnersInDB(): Promise<void> {
+  try {
+    const allRecords = await getAllArnsFromDB();
+    const missing = allRecords.filter(rec => !rec.owner);
+    if (missing.length > 0) {
+      await resolveAllArnsWithBackoff(missing);
+    }
+  } catch (err) {
+    console.error('Error resolving missing owners in DB:', err);
+  }
+}

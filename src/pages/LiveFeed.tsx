@@ -1,18 +1,13 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
-import toast from 'react-hot-toast';
 import { Card, CardHeader, CardTitle, CardContent } from '../components/common/Card';
-import { getArNSRecords, fetchAndStoreAllArNS, getAllArnsFromDB } from '../services/arnsService';
+import { getAllArnsFromDB } from '../services/arnsService';
+import { fetchAndMapArns } from '../services/arnsFetchService';
 import { calculateAnalyticsStatsInWorker } from '../services/arnsWorkerClient';
 import { ArNSRecord } from '../types';
 import { formatAddress, formatNumber } from '../utils/formatters';
 import { useNavigate } from 'react-router-dom';
-import { Activity, TrendingUp, Users, Clock, Award, Search, RefreshCw, Bell, BellOff } from 'lucide-react';
-import { ARIO } from '@ar.io/sdk';
-import { useNotifications } from '../contexts/NotificationContext';
+import { Activity, TrendingUp, Users, Clock, Award, Search } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
-
-// Initialize ARIO client for ArNS functionality
-const ario = ARIO.mainnet();
 
 const LiveFeed: React.FC = () => {
   const navigate = useNavigate();
@@ -22,14 +17,6 @@ const LiveFeed: React.FC = () => {
   const [statsLoading, setStatsLoading] = useState<boolean>(true);
   const [statsError, setStatsError] = useState<string | null>(null);
   
-  // Get notification state from context
-  const { 
-    notificationsEnabled, 
-    autoRefreshEnabled, 
-    toggleNotifications,
-    toggleAutoRefresh,
-  } = useNotifications();
-
   const [registrations, setRegistrations] = useState<ArNSRecord[]>([]);
   const [dbLoaded, setDbLoaded] = useState(false);
   const [dbCount, setDbCount] = useState<number>(0);
@@ -62,8 +49,8 @@ const LiveFeed: React.FC = () => {
   useEffect(() => {
     let mounted = true;
     (async () => {
-      const dbAll = await getAllArnsFromDB();
-      const sorted = dbAll.sort((a, b) => (b.startTimestamp||0) - (a.startTimestamp||0));
+      const dbAll: ArNSRecord[] = await getAllArnsFromDB();
+      const sorted = dbAll.sort((a: ArNSRecord, b: ArNSRecord) => (b.startTimestamp ?? 0) - (a.startTimestamp ?? 0));
       const mapped = mapExpires(sorted);
       if (mounted) {
         setAllRecords(mapped);
@@ -75,73 +62,35 @@ const LiveFeed: React.FC = () => {
     return () => { mounted = false; };
   }, []);
 
-  // Poll only new records (deltas)
+  // Poll only new records (deltas) with smart mapping
   useEffect(() => {
     if (!dbLoaded) return;
-    // Initialize last seen timestamp from current data
+    // Initialize last seen timestamp
     latestSeenTimestamp.current = registrations.reduce(
       (max, r) => Math.max(max, r.startTimestamp || 0),
       0
     );
     let mounted = true;
     const fetchDeltas = async () => {
+      if (mounted) setError(null);
       try {
-        const result = await getArNSRecords({
-          cursor: undefined,
-          limit: 30,
-          sortBy: 'startTimestamp',
-          sortOrder: 'desc',
-        });
-        // Only new items
-        const newRaw = (result.items as unknown as ArNSRecord[]).filter(
-          item => item.startTimestamp && item.startTimestamp > latestSeenTimestamp.current
-        );
-        if (newRaw.length === 0) return;
-        const dbRecords: ArNSRecord[] = await getAllArnsFromDB();
-        const dbOwnerMap = new Map(
-          dbRecords
-            .filter((r: any) => r.name && r.owner != null)
-            .map((r: any) => [r.name, r.owner])
-        );
-        const newWithOwner: ArNSRecord[] = newRaw.map(item => {
-          const owner = dbOwnerMap.get(item.name);
-          return owner != null ? { ...item, owner } : item;
-        });
-        let resolved: any[] = [];
-        const unresolved: ArNSRecord[] = newWithOwner.filter(item => item.owner == null);
-        if (unresolved.length > 0) {
-          const promises = unresolved.map(item =>
-            ario
-              .resolveArNSName({ name: item.name })
-              .then(res => ({ name: item.name, owner: res?.owner ?? '' }))
-              .catch(() => ({ name: item.name, owner: '' }))
-          );
-          resolved = await Promise.all(promises);
-        }
-        const merged: ArNSRecord[] = newWithOwner.map(item => {
-          const found = resolved.find(r => r.name === item.name);
-          return found ? { ...item, owner: found.owner } : item;
-        });
-        const mapped = mapExpires(merged);
-        if (mounted) {
-          setAllRecords(prev => [...mapped, ...prev]);
-          setRegistrations(mapped.slice(0, page * 30));
-          const { saveRecordsSmart } = await import('../utils/db');
-          await saveRecordsSmart(mapped);
-        }
+        // Fetch and map, skipping existing owners
+        const { items: mapped } = await fetchAndMapArns(undefined, 30);
+        const expiresMapped = mapExpires(mapped);
+        if (!mounted || expiresMapped.length === 0) return;
+        setAllRecords(prev => [...expiresMapped, ...prev]);
+        setRegistrations(expiresMapped.slice(0, page * 30));
         // Update timestamp
         latestSeenTimestamp.current = Math.max(
           latestSeenTimestamp.current,
-          ...mapped.map(item => item.startTimestamp || 0)
+          ...expiresMapped.map(item => item.startTimestamp || 0)
         );
       } catch (e) {
-        if (mounted) {
-          setError('Failed to fetch live records');
-        }
+        if (mounted) setError('Failed to fetch live records');
       }
     };
     fetchDeltas();
-    const intervalId = setInterval(fetchDeltas, 60000);
+    const intervalId = setInterval(fetchDeltas, 300000);
     return () => {
       mounted = false;
       clearInterval(intervalId);
@@ -196,17 +145,6 @@ const LiveFeed: React.FC = () => {
     return io.toLocaleString(undefined, { minimumFractionDigits: 8, maximumFractionDigits: 8 }) + ' ARIO';
   }
 
-  // Background seed full DB and update cache count
-  useEffect(() => {
-    fetchAndStoreAllArNS().then(result => {
-      const count = Array.isArray(result) ? result.length : 0;
-      setDbCount(count);
-      toast.success(`Fetched and saved ${count} ArNS records to browser DB`);
-    }).catch(() => {
-      toast.error('Failed to fetch and store all ArNS records');
-    });
-  }, []);
-
   // Page transition variants
   const pageVariants = {
     initial: { opacity: 0, y: 20 },
@@ -243,19 +181,6 @@ const LiveFeed: React.FC = () => {
     uniqueOwners: <Users className="h-5 w-5 text-accent-lavender" />
   }), []);
 
-  // Function to handle refresh
-  const handleRefresh = useCallback(() => {
-    setStatsLoading(true);
-    fetchAndStoreAllArNS().then(result => {
-      const count = Array.isArray(result) ? result.length : 0;
-      toast.success(`Refreshed ${count} ArNS records`);
-    }).catch(() => {
-      toast.error('Failed to refresh ArNS records');
-    }).finally(() => {
-      setStatsLoading(false);
-    });
-  }, []);
-
   // Show More: simply increment page to load next slice
   const handleShowMore = useCallback(() => {
     setPage(p => p + 1);
@@ -275,84 +200,7 @@ const LiveFeed: React.FC = () => {
       exit="exit"
       variants={pageVariants}
     >
-      {/* Page Header with Animation */}
-      <div className="relative">
-        <motion.div 
-          initial={{ opacity: 0, scale: 0.9 }}
-          animate={{ opacity: 1, scale: 1 }}
-          transition={{ duration: 0.5 }}
-          className="absolute -top-24 -left-24 w-64 h-64 bg-primary-200/10 dark:bg-accent-blue/5 rounded-full blur-3xl z-0"
-        />
-
-        <div className="relative z-10">
-          <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-4">
-            <div>
-              <motion.h1 
-                initial={{ opacity: 0, y: -10 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.3, delay: 0.1 }}
-                className="text-3xl sm:text-4xl font-bold bg-gradient-to-r from-primary-600 to-primary-400 dark:from-accent-blue dark:to-accent-lavender bg-clip-text text-transparent tracking-tight"
-              >
-                Live ArNS Feed
-              </motion.h1>
-              <motion.p 
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                transition={{ duration: 0.3, delay: 0.2 }}
-                className="mt-2 text-base text-gray-600 dark:text-dark-600"
-              >
-                Latest registrations on the Arweave Name Service
-              </motion.p>
-            </div>
-
-            <motion.div
-              initial={{ opacity: 0, scale: 0.9 }}
-              animate={{ opacity: 1, scale: 1 }}
-              transition={{ duration: 0.3, delay: 0.3 }}
-              className="w-full flex flex-col space-y-2 items-stretch md:flex-row md:items-center md:space-y-0 md:space-x-3"
-            >
-              <motion.button
-                whileHover={{ scale: 1.05 }}
-                whileTap={{ scale: 0.95 }}
-                onClick={handleRefresh}
-                disabled={statsLoading}
-                className="w-full md:w-auto flex items-center gap-2 px-4 py-2 bg-white/70 dark:bg-dark-100/40 backdrop-blur-sm rounded-lg shadow-sm border border-gray-200/50 dark:border-white/5 text-gray-700 dark:text-dark-500 hover:bg-white/90 dark:hover:bg-dark-100/60 transition-all"
-              >
-                <RefreshCw className={`h-4 w-4 ${statsLoading ? 'animate-spin' : ''}`} />
-                <span>Refresh Data</span>
-              </motion.button>
-              
-              <motion.button
-                whileHover={{ scale: 1.05 }}
-                whileTap={{ scale: 0.95 }}
-                onClick={toggleAutoRefresh}
-                className={`w-full md:w-auto flex items-center gap-2 px-4 py-2 backdrop-blur-sm rounded-lg shadow-sm border transition-all ${
-                  autoRefreshEnabled 
-                    ? "bg-accent-green/10 text-accent-green border-accent-green/20 dark:border-accent-green/10" 
-                    : "bg-white/70 dark:bg-dark-100/40 border-gray-200/50 dark:border-white/5 text-gray-700 dark:text-dark-500"
-                }`}
-              >
-                <RefreshCw className="h-4 w-4" />
-                <span>{autoRefreshEnabled ? 'Auto-refresh on' : 'Auto-refresh off'}</span>
-              </motion.button>
-              
-              <motion.button
-                whileHover={{ scale: 1.05 }}
-                whileTap={{ scale: 0.95 }}
-                onClick={toggleNotifications}
-                className={`w-full md:w-auto flex items-center gap-2 px-4 py-2 backdrop-blur-sm rounded-lg shadow-sm border transition-all ${
-                  notificationsEnabled 
-                    ? "bg-accent-blue/10 text-accent-blue border-accent-blue/20 dark:border-accent-blue/10" 
-                    : "bg-white/70 dark:bg-dark-100/40 border-gray-200/50 dark:border-white/5 text-gray-700 dark:text-dark-500"
-                }`}
-              >
-                {notificationsEnabled ? <Bell className="h-4 w-4" /> : <BellOff className="h-4 w-4" />}
-                <span>{notificationsEnabled ? 'Notifications on' : 'Notifications off'}</span>
-              </motion.button>
-            </motion.div>
-          </div>
-        </div>
-      </div>
+      {/* Header section removed */}
 
       {/* Stats Cards with Staggered Animation */}
       <motion.div 
