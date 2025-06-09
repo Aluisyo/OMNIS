@@ -47,6 +47,10 @@
     @apply antialiased;
     font-feature-settings: "rlig" 1, "calt" 1;
   }
+  html {
+    overflow-y: scroll;
+    scrollbar-gutter: stable;
+  }
 }
 
 /* Animation for new registrations */

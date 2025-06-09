@@ -42,7 +42,7 @@ export function showRegistrationNotification(name: string, owner: string): boole
     icon: '/favicon.svg',
     badge: '/favicon.svg',
     tag: `registration-${name}`,
-    timestamp: Date.now(),
+    data: { timestamp: Date.now() },
     requireInteraction: false
   });
 }

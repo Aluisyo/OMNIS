@@ -233,7 +233,7 @@ const GlobalSearch: React.FC = () => {
               onFocus={() => setIsFocused(true)}
               onBlur={handleBlur}
               placeholder="Search names, address, tags..."
-              className="h-10 w-full rounded-lg border-0 bg-white/20 backdrop-blur-sm pl-10 pr-10 text-sm text-gray-900 placeholder-gray-700 ring-1 ring-white/30 focus:outline-none focus:ring-2 focus:ring-primary-400 dark:bg-dark-200/40 dark:text-white dark:placeholder-gray-400 dark:ring-white/10 dark:focus:ring-accent-blue transition-all duration-200 ease-in-out"
+              className="h-10 w-full rounded-lg border-0 bg-white/20 backdrop-blur-sm pl-10 pr-10 text-base md:text-sm text-gray-900 placeholder-gray-700 ring-1 ring-white/30 focus:outline-none focus:ring-2 focus:ring-primary-400 dark:bg-dark-200/40 dark:text-white dark:placeholder-gray-400 dark:ring-white/10 dark:focus:ring-accent-blue transition-all duration-200 ease-in-out"
             />
             {query && (
               <motion.button
@@ -396,7 +396,7 @@ const Header: React.FC = () => {
   };
 
   return (
-    <header className="sticky top-0 left-0 right-0 z-40 w-full backdrop-blur-sm bg-white/80 dark:bg-dark-200/80 border-b border-gray-200/50 dark:border-white/5 shadow-sm">
+    <header className="fixed top-0 left-0 right-0 z-40 w-full backdrop-blur-sm bg-white/80 dark:bg-dark-200/80 border-b border-gray-200/50 dark:border-white/5 shadow-sm">
       <div className="container mx-auto px-4 sm:px-6">
         <div className="flex h-16 items-center justify-between">
           {/* Left Side: Logo and Desktop Nav */}
