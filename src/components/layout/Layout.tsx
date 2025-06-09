@@ -1,30 +1,21 @@
-import React, { useState, useEffect } from 'react';
+import * as React from 'react';
 import { Outlet } from 'react-router-dom';
 import Header from './Header';
 import Footer from './Footer';
 import { Toaster } from 'react-hot-toast';
 import { motion } from 'framer-motion';
-import { onResolutionProgress, onResolutionError } from '../../services/arnsWorkerClient';
+import { useData } from '../../contexts/DataContext';
+import { useNotifications } from '../../contexts/NotificationContext';
 
 const Layout: React.FC = () => {
-  const [resolvingOwners, setResolvingOwners] = useState(false);
-  const [ownerResolveProgress, setOwnerResolveProgress] = useState({ cur: 0, total: 0 });
-  const [ownerResolveError, setOwnerResolveError] = useState<string | null>(null);
-  const [currentResolvingName, setCurrentResolvingName] = useState<string | null>(null);
-
-  useEffect(() => {
-    const unsubProgress = onResolutionProgress((cur, total, name) => {
-      // Clear error on new progress to resume status updates
-      setOwnerResolveError(null);
-      setOwnerResolveProgress({ cur, total });
-      setResolvingOwners(cur < total);
-      setCurrentResolvingName(name || null);
-    });
-    const unsubError = onResolutionError((_, error) => {
-      setOwnerResolveError(error);
-    });
-    return () => { unsubProgress(); unsubError(); };
-  }, []);
+  const { loading: dataLoading } = useData();
+  const { isLoading: registrationsLoading } = useNotifications();
+  const activityActive = dataLoading || registrationsLoading;
+  const activityTitle = dataLoading
+    ? 'Loading ARNS data...'
+    : registrationsLoading
+      ? 'Refreshing ARNS data...'
+      : '';
 
   return (
     <div className="flex min-h-screen flex-col bg-gradient-to-br from-gray-50 to-gray-100 text-gray-900 dark:from-dark-300 dark:to-dark-400 dark:text-dark-500 relative">
@@ -70,35 +61,18 @@ const Layout: React.FC = () => {
           },
         }}
       />
-      {resolvingOwners && (
+      {activityActive && (
         <div className="fixed bottom-4 right-6 z-50">
           <div className="relative">
             <motion.div
               className="h-3 w-3 rounded-full cursor-pointer p-1 hover:scale-110"
-              animate={{
-                backgroundColor: ownerResolveError ? '#EF4444' : ['#EF4444', '#F59E0B', '#10B981'],
-                y: [0, -4, 0, 4, 0]
-              }}
+              animate={{ backgroundColor: '#F59E0B', y: [0, -4, 0, 4, 0] }}
               transition={{
-                backgroundColor: ownerResolveError
-                  ? { duration: 0 }
-                  : { duration: 1.5, repeat: Infinity, repeatType: 'reverse' },
+                backgroundColor: { duration: 1.5, repeat: Infinity, repeatType: 'reverse' },
                 y: { duration: 2, repeat: Infinity, repeatType: 'reverse', ease: 'easeInOut' }
               }}
-              title={
-                ownerResolveError
-                  ? `Error resolving owner: ${ownerResolveError}`
-                  : currentResolvingName
-                    ? `Resolving ${currentResolvingName}: ${ownerResolveProgress.cur} of ${ownerResolveProgress.total}`
-                    : `Resolving owners: ${ownerResolveProgress.cur} of ${ownerResolveProgress.total}`
-              }
-              aria-label={
-                ownerResolveError
-                  ? `Error resolving owner: ${ownerResolveError}`
-                  : currentResolvingName
-                    ? `Resolving ${currentResolvingName}: ${ownerResolveProgress.cur} of ${ownerResolveProgress.total}`
-                    : `Resolving owners: ${ownerResolveProgress.cur} of ${ownerResolveProgress.total}`
-              }
+              title={activityTitle}
+              aria-label={activityTitle}
             />
           </div>
         </div>

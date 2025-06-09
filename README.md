@@ -27,24 +27,59 @@ A modern web application for exploring the Arweave Name Service (ArNS) ecosystem
 
 ### Installation
 
+#### Frontend Installation
+
 ```bash
 # Clone the repository
 git clone https://github.com/Aluisyo/OMNIS
-
-# Navigate to the project directory
 cd OMNIS
 
 # Install dependencies
 npm install
 
-# Start the development server
+# Start the frontend development server
+npm run dev
+```
+
+#### Backend Installation
+
+```bash
+# Navigate to the backend directory
+cd backend
+
+# Install dependencies
+npm install
+
+# Start the backend development server
 npm run dev
 ```
 
 ### Building for Production
 
+#### Frontend Build
+
 ```bash
+# Navigate to the root directory
+cd OMNIS
+
+# Build the frontend for production
 npm run build
+```
+
+#### Backend Build
+
+```bash
+# Navigate to the backend directory
+cd backend
+
+# Install dependencies if not installed
+npm install
+
+# Build the backend for production
+npm run build
+
+# Start the backend server
+npm start
 ```
 
 ## Architecture

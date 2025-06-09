@@ -5,12 +5,12 @@ import { Card, CardContent, CardHeader, CardTitle } from '../components/common/C
 import Button from '../components/common/Button';
 import ArNSTable from '../components/directory/ArNSTable';
 import DirectoryTimeline from '../components/directory/DirectoryTimeline';
-import { getAllArnsFromDB, fetchAndStoreAllArNS } from '../services/arnsService'; // owner is always trusted from DB
+import { useData } from '../contexts/DataContext';
 import { sortAndPaginateRecordsInWorker } from '../services/arnsWorkerClient';
 import { ArNSRecord, FilterOptions } from '../types';
-import { useDebounce } from '../hooks/useDebounce';
-import { motion } from 'framer-motion';
+import { formatAddress } from '../utils/formatters';
 import { formatIO } from '../components/directory/ArNSTable';
+import { motion } from 'framer-motion';
 
 function getQueryParams(filters: FilterOptions) {
   const params = new URLSearchParams();
@@ -22,15 +22,21 @@ function getQueryParams(filters: FilterOptions) {
 }
 
 const Directory: React.FC = () => {
+  const { records, loading: dataLoading, error: dataError, refresh } = useData();
   const location = useLocation();
   const navigate = useNavigate();
   const searchInputRef = useRef<HTMLInputElement>(null);
-  const [allRecords, setAllRecords] = useState<ArNSRecord[]>([]);
-  const [records, setRecords] = useState<ArNSRecord[]>([]);
+  const [allRecords, setAllRecords] = useState<ArNSRecord[]>(records);
+  const [filteredRecords, setFilteredRecords] = useState<ArNSRecord[]>([]);
   const [total, setTotal] = useState<number>(0);
-  const [loading, setLoading] = useState<boolean>(true);
-  const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState<boolean>(dataLoading);
+  const [error, setError] = useState<string | null>(dataError);
   
+  // Sync context records into local state when data updates
+  useEffect(() => {
+    setAllRecords(records);
+  }, [records]);
+
   // View mode toggle (table or timeline)
   const [viewMode, setViewMode] = useState<'table' | 'timeline'>('table');
   
@@ -47,7 +53,6 @@ const Directory: React.FC = () => {
   
   const [showFilters, setShowFilters] = useState<boolean>(false);
   const [searchInput, setSearchInput] = useState<string>('');
-  const debouncedSearchInput = useDebounce(searchInput, 200);
 
   const [exportMenuOpen, setExportMenuOpen] = useState<boolean>(false);
   const [exportPageCount, setExportPageCount] = useState<number>(1);
@@ -59,7 +64,7 @@ const Directory: React.FC = () => {
   const exportCsv = async (mode: 'current' | 'pages' | 'all', pagesCount = 1) => {
     let exportRecords: ArNSRecord[] = [];
     if (mode === 'current') {
-      exportRecords = records;
+      exportRecords = filteredRecords;
     } else if (mode === 'pages') {
       const perPageLarge = filters.perPage * pagesCount;
       const result = await sortAndPaginateRecordsInWorker(
@@ -146,71 +151,9 @@ const Directory: React.FC = () => {
 
   // Load all records from browser DB on mount
   useEffect(() => {
-    setLoading(true);
-    setError(null);
-    
-    const loadData = async () => {
-      try {
-        // First try to get from DB
-        let dbRecords = await getAllArnsFromDB();
-        // Map endTimestamp to expiresAt if needed
-        dbRecords = dbRecords.map(r => ({
-          ...r,
-          expiresAt: r.expiresAt ?? r.endTimestamp ?? null
-        }));
-        
-        if (dbRecords.length === 0) {
-          // If DB is empty, fetch from network
-          const networkRecords = await fetchAndStoreAllArNS();
-          
-          // Use the network records directly instead of fetching from DB again
-          if (networkRecords && networkRecords.length > 0) {
-            // Map endTimestamp to expiresAt if needed
-            const mappedNetworkRecords = networkRecords.map(r => ({
-              ...r,
-              expiresAt: r.expiresAt ?? r.endTimestamp ?? null
-            }));
-            setAllRecords(mappedNetworkRecords);
-          } else {
-            // If no network records either, try DB one more time
-            const freshDbRecords = await getAllArnsFromDB();
-            setAllRecords(freshDbRecords);
-            
-            if (freshDbRecords.length === 0) {
-              setError('No ArNS records found after fetching from the network.');
-            }
-          }
-        } else {
-          // We have records in DB
-          setAllRecords(dbRecords);
-        }
-      } catch (err) {
-        setError('Failed to load ArNS records: ' + (err instanceof Error ? err.message : String(err)));
-      } finally {
-        setLoading(false);
-      }
-    };
-    
-    loadData();
-
-    // Poll for updates every 3 seconds
-    const interval = setInterval(async () => {
-      try {
-        let dbRecords = await getAllArnsFromDB();
-        dbRecords = dbRecords.map(r => ({
-          ...r,
-          expiresAt: r.expiresAt ?? r.endTimestamp ?? null
-        }));
-        // Only update if changed (length or shallow compare)
-        if (dbRecords.length !== allRecords.length || dbRecords.some((r, i) => r.name !== allRecords[i]?.name || r.owner !== allRecords[i]?.owner)) {
-          setAllRecords(dbRecords);
-        }
-      } catch (err) {
-        // Optionally handle polling error
-      }
-    }, 3000);
-    return () => clearInterval(interval);
-  }, []);
+    setLoading(dataLoading);
+    setError(dataError);
+  }, [dataLoading, dataError]);
 
   // Offload filtering, sorting, and pagination to worker
   useEffect(() => {
@@ -233,7 +176,7 @@ const Directory: React.FC = () => {
           
           if (!active) return;
           const { records: paged, total } = result;
-          setRecords(paged);
+          setFilteredRecords(paged);
           setTotal(total);
         } catch (err) {
           console.error('Failed to filter/paginate records:', err);
@@ -247,7 +190,7 @@ const Directory: React.FC = () => {
     } else {
       // If no records yet, reset the records and total to empty/zero
       // but don't call the worker as it would just return empty results
-      setRecords([]);
+      setFilteredRecords([]);
       setTotal(0);
     }
   }, [allRecords, filters]);
@@ -255,7 +198,17 @@ const Directory: React.FC = () => {
   // Handle filter changes
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
-    setFilters(f => ({ ...f, searchTerm: searchInput, page: 1 }));
+    let term = searchInput;
+    // expand truncated formatAddress input to full owner
+    if (term.includes('...')) {
+      const lowerTerm = term.toLowerCase();
+      const match = allRecords.find(r => formatAddress(r.owner ?? '').toLowerCase() === lowerTerm);
+      if (match?.owner) {
+        term = match.owner;
+        setSearchInput(term);
+      }
+    }
+    setFilters(f => ({ ...f, searchTerm: term, page: 1 }));
   };
 
   // Handle sort change
@@ -399,8 +352,17 @@ const Directory: React.FC = () => {
                 type="text"
                 value={searchInput}
                 onChange={e => {
-                  setSearchInput(e.target.value);
-                  setFilters(f => ({ ...f, searchTerm: e.target.value, page: 1 }));
+                  let val = e.target.value;
+                  // if user pasted truncated address, expand to full
+                  if (val.includes('...')) {
+                    const lowerVal = val.toLowerCase();
+                    const match = allRecords.find(r => formatAddress(r.owner ?? '').toLowerCase() === lowerVal);
+                    if (match?.owner) {
+                      val = match.owner;
+                    }
+                  }
+                  setSearchInput(val);
+                  setFilters(f => ({ ...f, searchTerm: val, page: 1 }));
                 }}
                 placeholder="Search names or owners..."
                 className="h-14 w-full rounded-xl border-2 border-gray-200/80 dark:border-gray-700/80 bg-white/80 dark:bg-gray-900/50 backdrop-blur-md px-5 pr-12 text-base shadow-lg transition-all duration-200 focus:border-blue-500 dark:focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20 dark:focus:ring-blue-400/20 dark:text-white dark:placeholder-gray-400 group-hover:shadow-xl"
@@ -481,8 +443,7 @@ const Directory: React.FC = () => {
                 onClick={async () => {
                   setLoading(true);
                   try {
-                    const dbRecords = await getAllArnsFromDB();
-                    setAllRecords(dbRecords);
+                    await refresh();
                   } finally {
                     setLoading(false);
                   }
@@ -643,7 +604,7 @@ const Directory: React.FC = () => {
                     variant="outline" 
                     size="sm" 
                     className="mt-3 bg-white/80 dark:bg-red-900/30 backdrop-blur-sm border-red-200 dark:border-red-900/50 hover:bg-white/90 dark:hover:bg-red-900/40 text-red-700 dark:text-red-200" 
-                    onClick={() => fetchAndStoreAllArNS().then(records => setAllRecords(records)).catch(err => setError(err.message))}
+                    onClick={() => refresh().then(() => setAllRecords(records))}
                   >
                     Try Again
                   </Button>
@@ -684,12 +645,12 @@ const Directory: React.FC = () => {
                 variant="primary" 
                 size="sm" 
                 className="mt-4 shadow-sm hover:shadow transition-all duration-200" 
-                onClick={() => fetchAndStoreAllArNS().then(records => setAllRecords(records))}
+                onClick={() => refresh().then(() => setAllRecords(records))}
               >
                 Refresh Data
               </Button>
             </motion.div>
-          ) : records.length === 0 && total === 0 ? (
+          ) : filteredRecords.length === 0 && total === 0 ? (
             <motion.div 
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
@@ -711,7 +672,7 @@ const Directory: React.FC = () => {
               {viewMode === 'table' && (
                 <>
                   <ArNSTable
-                    data={records}
+                    data={filteredRecords}
                     total={total}
                     page={filters.page}
                     perPage={filters.perPage}
@@ -728,7 +689,7 @@ const Directory: React.FC = () => {
               {/* Timeline View */}
               {viewMode === 'timeline' && (
                 <DirectoryTimeline 
-                  records={records}
+                  records={filteredRecords}
                   onNameClick={(name) => navigate(`/name/${name}`)}
                 />
               )}

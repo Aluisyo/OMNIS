@@ -46,9 +46,11 @@ const GlobalSearch: React.FC = () => {
     };
 
     const mobileSearchHandler = () => {
+      console.log('[GlobalSearch] mobileSearchHandler triggered');
       setMobileSearchVisible(true);
       setQuery(''); // Clear previous query
       setResults([]); // Clear previous results
+      setIsFocused(true);
       setTimeout(() => {
         if (inputRef.current) { // Focus input within mobile overlay
           inputRef.current.focus();
@@ -68,7 +70,7 @@ const GlobalSearch: React.FC = () => {
   // Live suggestion logic (debounced)
   useEffect(() => {
     let active = true;
-    if (debouncedQuery.length > 1 && isFocused) {
+    if (debouncedQuery.length > 1 && (isFocused || mobileSearchVisible)) {
       setLoading(true);
       getAllArnsFromDB().then(allRecords => {
         if (!active) return;
@@ -97,6 +99,7 @@ const GlobalSearch: React.FC = () => {
   }, [debouncedQuery, isFocused, mobileSearchVisible]);
 
   const handleSearch = async (e: React.FormEvent) => {
+    console.log('[GlobalSearch] handleSearch invoked, query:', query, 'mobileSearchVisible:', mobileSearchVisible);
     e.preventDefault();
     if (!query.trim()) {
       setResults([]);
@@ -122,6 +125,29 @@ const GlobalSearch: React.FC = () => {
       setShowDropdown(false);
     }
     setLoading(false);
+  };
+
+  // Mobile overlay: search as user types
+  const handleMobileInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const val = e.target.value;
+    setQuery(val);
+    if (val.trim()) {
+      setLoading(true);
+      getAllArnsFromDB()
+        .then(allRecords => {
+          const q = val.toLowerCase();
+          const matches = allRecords.filter((record: any) =>
+            (record.name?.toLowerCase().includes(q)) ||
+            (record.owner?.toLowerCase().includes(q)) ||
+            (Array.isArray(record.tags) && record.tags.some((tag: string) => tag.toLowerCase().includes(q)))
+          );
+          setResults(matches.slice(0, mobileSearchVisible ? 20 : 8));
+        })
+        .catch(err => console.error('[GlobalSearch] mobile search error', err))
+        .finally(() => setLoading(false));
+    } else {
+      setResults([]);
+    }
   };
 
   const handleSelect = (name: string) => {
@@ -286,7 +312,7 @@ const GlobalSearch: React.FC = () => {
           
           <form
             autoComplete="off"
-            onSubmit={handleSearch} 
+            onSubmit={e => { e.preventDefault(); if (results.length > 0) handleSelect(results[0].name); }} 
             className="w-full mb-4"
           >
             <div className="relative">
@@ -295,7 +321,8 @@ const GlobalSearch: React.FC = () => {
                 ref={inputRef} // Re-use inputRef for mobile search input
                 type="search"
                 value={query}
-                onChange={e => setQuery(e.target.value)}
+                onChange={handleMobileInputChange}
+                onKeyUp={e => { if (e.key === 'Enter' && results.length > 0) { e.preventDefault(); handleSelect(results[0].name); } }}
                 onFocus={() => setIsFocused(true)} 
                 placeholder="Search names, addresses, tags..."
                 className="h-12 w-full rounded-xl border-0 bg-gray-100 dark:bg-dark-100 pl-12 pr-10 text-base text-gray-900 placeholder-gray-700 focus:outline-none focus:ring-2 focus:ring-primary-400 dark:focus:ring-accent-blue dark:text-white dark:placeholder-gray-400 transition-all duration-200 ease-in-out"
@@ -317,6 +344,12 @@ const GlobalSearch: React.FC = () => {
                 </motion.button>
               )}
             </div>
+            <button
+              type="submit"
+              className="mt-2 w-full px-4 py-2 bg-primary-600 text-white rounded-xl hover:bg-primary-700 transition-colors"
+            >
+              Search
+            </button>
           </form>
 
           <div className="flex-grow overflow-y-auto -mx-4">

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import { FC, useState, useEffect, useMemo } from 'react';
 import { motion } from 'framer-motion';
 import {
   LineChart,
@@ -22,22 +22,10 @@ import {
 import { Activity, TrendingUp, Calendar, DollarSign, Users, Lock, RefreshCw } from 'lucide-react';
 import { Card, CardHeader, CardContent, CardTitle } from '../components/common/Card';
 import Button from '../components/common/Button';
-import { getAllArnsFromDB } from '../services/arnsService';
 import { calculateAnalyticsStatsInWorker, onResolutionProgress } from '../services/arnsWorkerClient';
-
-// Simple loading component
-const PageLoading = () => (
-  <div className="flex items-center justify-center h-full py-20">
-    <div className="animate-spin rounded-full h-10 w-10 border-t-2 border-b-2 border-primary-600"></div>
-  </div>
-);
-
-// Simple error message component
-const ErrorMessage = ({ message }: { message: string }) => (
-  <div className="p-4 bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 rounded-md border border-red-200 dark:border-red-800 mt-4">
-    <p>{message}</p>
-  </div>
-);
+import { useData } from '../contexts/DataContext';
+import PageLoading from '../components/common/PageLoading';
+import ErrorMessage from '../components/common/ErrorMessage';
 
 // Format number helper
 const formatNumber = (num: number) => {
@@ -94,14 +82,15 @@ interface NameLengthBucketItem {
   count: number;
 }
 
-const Analytics: React.FC = () => {
+const Analytics: FC = () => {
+  const { records, loading: dbLoading, error: dbError, refresh } = useData();
+  const [analyticsLoading, setAnalyticsLoading] = useState<boolean>(true);
+  const [analyticsError, setAnalyticsError] = useState<string | null>(null);
   const [stats, setStats] = useState<ArNSStats | null>(null);
   const [trends, setTrends] = useState<RegistrationTrend[]>([]);
   const [timeRange, setTimeRange] = useState<'week' | 'month' | 'year'>('month');
   const [maximizedChart, setMaximizedChart] = useState<string | null>(null);
-  const [loading, setLoading] = useState(true);
   const [priceHistory, setPriceHistory] = useState<PriceHistoryItem[]>([]);
-  const [error, setError] = useState<string | null>(null);
   const [registrationDistribution, setRegistrationDistribution] = useState<{ name: string; value: number }[]>([]);
   const [dailyCounts, setDailyCounts] = useState<{ date: string; count: number }[]>([]);
   const [uniqueOwnersTrend, setUniqueOwnersTrend] = useState<UniqueOwnersTrendItem[]>([]);
@@ -135,7 +124,7 @@ const Analytics: React.FC = () => {
         });
 
         console.log('Fetching ArNS records from IndexedDB...');
-        const allRecords = await getAllArnsFromDB();
+        const allRecords = records;
         console.log(`Loaded ${allRecords.length} records from IndexedDB`);
         // Process data in web worker
         console.log('Calculating analytics stats in worker...');
@@ -195,13 +184,13 @@ const Analytics: React.FC = () => {
           setUniqueOwnersTrend(uot.filter(item => item.month !== '2024-12' && item.month !== '2025-02'));
           setTypeBreakdown(tbd.filter(item => item.month !== '2024-12' && item.month !== '2025-02'));
           setNameLengthBuckets(nlb);
-          setLoading(false);
+          setAnalyticsLoading(false);
         }
       } catch (err) {
         if (isMounted) {
           console.error('Error fetching analytics data:', err);
-          setError('Failed to load analytics data. Please try again later.');
-          setLoading(false);
+          setAnalyticsError('Failed to load analytics data. Please try again later.');
+          setAnalyticsLoading(false);
         }
       } finally {
         if (unsubProgress) unsubProgress();
@@ -273,6 +262,7 @@ const Analytics: React.FC = () => {
       } else if (currCount > 0) {
         growth = 100; // If previous month was 0, but current month has registrations
       }
+      growth = Math.max(growth, 0); // Clamp negative growth to zero
       const monthDate = new Date(currMonth[0] + '-01');
       const monthName = monthDate.toLocaleString('default', { month: 'short' });
       growthData.push({
@@ -285,7 +275,7 @@ const Analytics: React.FC = () => {
   const growthRateData = generateMonthlyGrowthData();
 
   // Data for monthly registration distribution bar chart
-  const registrationBarData = React.useMemo(() => {
+  const registrationBarData = useMemo(() => {
     const map: { [key: string]: number } = {};
     trends.filter(trend => trend.date !== '2024-12-26' && trend.date !== '2025-02-20').forEach(({ date, count }) => {
       const month = date.slice(0, 7);
@@ -362,7 +352,7 @@ const Analytics: React.FC = () => {
       </div>
 
       {/* Conditional rendering based on loading/error state */}
-      {loading ? (
+      {(dbLoading || analyticsLoading) ? (
         <motion.div 
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
@@ -430,7 +420,7 @@ const Analytics: React.FC = () => {
             </div>
           </motion.div>
         </motion.div>
-      ) : error ? (
+      ) : (dbError || analyticsError) ? (
         <motion.div
           initial={{ opacity: 0, y: 10 }}
           animate={{ opacity: 1, y: 0 }}
@@ -440,7 +430,7 @@ const Analytics: React.FC = () => {
             <CardContent className="p-6">
               <div className="flex items-center justify-center">
                 <div className="bg-accent-red/10 p-4 rounded-xl border border-accent-red/20 dark:border-accent-red/10">
-                  <p className="text-accent-red">{error}</p>
+                  <p className="text-accent-red">{dbError || analyticsError}</p>
                 </div>
               </div>
             </CardContent>

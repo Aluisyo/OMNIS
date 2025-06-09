@@ -10,20 +10,6 @@ export function getArnsWorker(): Worker {
   return worker;
 }
 
-export function resolveOwnersInWorker(records: any[]): Promise<any[]> {
-  return new Promise((resolve) => {
-    const w = getArnsWorker();
-    const handler = (e: MessageEvent) => {
-      if (e.data.type === 'RESOLVED_OWNERS') {
-        w.removeEventListener('message', handler);
-        resolve(e.data.records);
-      }
-    };
-    w.addEventListener('message', handler);
-    w.postMessage({ type: 'RESOLVE_OWNERS', records });
-  });
-}
-
 // Progress and error subscribers
 // Progress callback now includes optional record name
 let progressSubscribers: ((current: number, total: number, name?: string) => void)[] = [];
@@ -37,25 +23,6 @@ export function onResolutionProgress(cb: (current: number, total: number, name?:
 export function onResolutionError(cb: (name: string, error: string) => void) {
   errorSubscribers.push(cb);
   return () => { errorSubscribers = errorSubscribers.filter(fn => fn !== cb); };
-}
-
-export function resolveOwnersBatchInWorker(records: any[]): Promise<any[]> {
-  return new Promise((resolve) => {
-    const w = getArnsWorker();
-    const handler = (e: MessageEvent) => {
-      if (e.data.type === 'RESOLVED_OWNERS_BATCH') {
-        w.removeEventListener('message', handler);
-        resolve(e.data.records);
-      } else if (e.data.type === 'RESOLUTION_PROGRESS') {
-        // Include name in progress callback
-        progressSubscribers.forEach(fn => fn(e.data.current, e.data.total, e.data.name));
-      } else if (e.data.type === 'RESOLUTION_ERROR') {
-        errorSubscribers.forEach(fn => fn(e.data.name, e.data.error));
-      }
-    };
-    w.addEventListener('message', handler);
-    w.postMessage({ type: 'RESOLVE_OWNERS_BATCH', records });
-  });
 }
 
 /**

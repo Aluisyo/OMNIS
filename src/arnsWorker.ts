@@ -3,138 +3,16 @@
 
 // Types for message passing
 export type WorkerRequest =
-  | { type: 'RESOLVE_OWNERS'; records: any[] }
-  | { type: 'RESOLVE_OWNERS_BATCH'; records: any[] }
   | { type: 'FILTER_RECORDS'; records: any[]; search: string }
   | { type: 'SORT_AND_PAGINATE_RECORDS'; records: any[]; search: string; sortBy: string; sortDirection: 'asc' | 'desc'; page: number; perPage: number }
   | { type: 'CALCULATE_ANALYTICS_STATS'; records: any[] }
   | { type: 'CALCULATE_TOP_HOLDERS'; records: any[] };
 
 export type WorkerResponse =
-  | { type: 'RESOLVED_OWNERS'; records: any[] }
-  | { type: 'RESOLVED_OWNERS_BATCH'; records: any[] }
   | { type: 'FILTERED_RECORDS'; records: any[] }
   | { type: 'SORTED_PAGINATED_RECORDS'; records: any[]; total: number }
   | { type: 'ANALYTICS_STATS'; stats: any; trends: any; priceHistory: any; uniqueOwnersTrend: { month: string; count: number }[]; priceBuckets: { bucket: string; count: number }[]; dailyCounts: { date: string; count: number }[]; typeBreakdown: { month: string; leases: number; permabuys: number }[]; topDomains: { domain: string; count: number }[]; nameLengthBuckets: { bucket: string; count: number }[] }
   | { type: 'TOP_HOLDERS'; holders: any[] };
-
-// Import the ARIO SDK
-import { ARIO } from '@ar.io/sdk';
-
-const ario = ARIO.mainnet();
-
-// Rate limiting controls
-const MIN_REQUEST_INTERVAL = 3000; // 3 seconds between requests
-let lastRequestTime = 0;
-
-// Helper function to ensure minimum time between API calls
-async function safeApiCall<T>(apiCall: () => Promise<T>): Promise<T> {
-  const now = Date.now();
-  const timeSinceLastRequest = now - lastRequestTime;
-  
-  // If we need to wait to respect rate limits
-  if (timeSinceLastRequest < MIN_REQUEST_INTERVAL && lastRequestTime !== 0) {
-    const waitTime = MIN_REQUEST_INTERVAL - timeSinceLastRequest;
-    console.log(`Worker: Waiting ${waitTime}ms before API call to avoid rate limiting`);
-    await new Promise(r => setTimeout(r, waitTime));
-  }
-  
-  lastRequestTime = Date.now();
-  return await apiCall();
-}
-
-// Helper: Throttle concurrent promises for rate-limit safety
-async function throttleAll<T, R>(items: T[], limit: number, fn: (item: T, idx: number) => Promise<R>, onProgress?: (progress: number, total: number) => void): Promise<R[]> {
-  const results: R[] = [];
-  let idx = 0;
-  let completed = 0;
-  const total = items.length;
-  
-  // Reduce concurrency to 1 to be safe
-  limit = 1; 
-  
-  async function runner() {
-    while (true) {
-      const current = idx++;
-      if (current >= items.length) break;
-      try {
-        // Add delay between each item in a single runner
-        if (completed > 0) {
-          await new Promise(r => setTimeout(r, MIN_REQUEST_INTERVAL));
-        }
-        
-        results[current] = await fn(items[current], current);
-      } catch (e) {
-        console.error(`Error processing item ${current}:`, e);
-        results[current] = undefined as any;
-      }
-      completed++;
-      if (onProgress) onProgress(completed, total);
-    }
-  }
-  
-  // Start limited runners
-  const runners = Array.from({ length: Math.min(limit, items.length) }, runner);
-  await Promise.all(runners);
-  return results;
-}
-
-// Helper for batch owner resolution using ar.io/sdk, with progress and error handling
-async function resolveOwnersBatch(records: any[]): Promise<any[]> {
-  // Only resolve records with missing owner
-  const unresolved = records.filter(r => r.owner == null);
-  if (unresolved.length === 0) return records;
-  const resolved = await throttleAll(unresolved, 1, async (r, idx) => {
-    try {
-      // Use safe API call to ensure rate limiting is respected
-      const resolved = await safeApiCall(() => ario.resolveArNSName({ name: r.name }));
-      
-      // Log success for monitoring
-      console.log(`Successfully resolved ${r.name} (${idx + 1}/${records.length})`);
-      
-      // Safely access all fields
-      return {
-        ...r,
-        ...resolved,
-        owner: (resolved && typeof resolved.owner === 'string') ? resolved.owner : (r.owner || ''),
-        startTimestamp: r.startTimestamp || (resolved && 'startTimestamp' in resolved ? (resolved as any).startTimestamp : undefined),
-        endTimestamp: r.endTimestamp || (resolved && 'endTimestamp' in resolved ? (resolved as any).endTimestamp : undefined),
-        purchasePrice: r.purchasePrice || (resolved && 'purchasePrice' in resolved ? (resolved as any).purchasePrice : undefined),
-        processId: r.processId || (resolved && 'processId' in resolved ? (resolved as any).processId : undefined),
-        type: r.type || (resolved && 'type' in resolved ? (resolved as any).type : undefined)
-      };
-    } catch (e) {
-      // Log detailed error information
-      console.error(`Error resolving ${r.name} (${idx + 1}/${records.length}):`, e);
-      self.postMessage({ type: 'RESOLUTION_ERROR', name: r.name, error: (e as Error).message });
-      
-      // Extra delay after error to help avoid further rate limiting
-      await new Promise(res => setTimeout(res, 5000));
-      
-      return { ...r };
-    } finally {
-      // Progress update after each, include record name
-      self.postMessage({ type: 'RESOLUTION_PROGRESS', current: idx + 1, total: records.length, name: r.name });
-    }
-  });
-  // Merge resolved owners back into the original records
-  const resolvedMap = new Map(resolved.map(r => [r.name, r]));
-  return records.map(r => resolvedMap.get(r.name) || r);
-}
-
-
-
-// Dummy resolver (replace with real logic or WASM call)
-async function resolveOwners(records: any[]): Promise<any[]> {
-  // Only resolve records with missing owner
-  return records.map(r => {
-    if (!r.owner) {
-      // Simulate async resolution (replace with WASM/SDK logic)
-      return { ...r, owner: 'dummy-owner' };
-    }
-    return r;
-  });
-}
 
 // Analytics: heavy stats/trends computation with progress
 async function calculateAnalyticsStatsInWorker(records: any[]) {
@@ -371,7 +249,7 @@ async function calculateAnalyticsStatsInWorker(records: any[]) {
     
     // Calculate growth rate (percentage change between current and previous month)
     if (previousMonthRegistrations > 0) {
-      stats.growthRate = ((currentMonthRegistrations - previousMonthRegistrations) / previousMonthRegistrations) * 100;
+      stats.growthRate = Math.max(((currentMonthRegistrations - previousMonthRegistrations) / previousMonthRegistrations) * 100, 0);
     } else if (currentMonthRegistrations > 0) {
       stats.growthRate = 100; // If no previous month data but current month has registrations, 100% growth
     } else {
@@ -461,7 +339,7 @@ async function calculateTopHoldersInWorker(records: any[]) {
         percentage: (count / totalNames) * 100,
       }))
       .sort((a, b) => b.count - a.count)
-      .slice(0, 10);
+      .slice(0, 100); // return top 100 holders for UI selection
     self.postMessage({ type: 'TOP_HOLDERS', holders });
   } catch (e) {
     self.postMessage({ type: 'RESOLUTION_ERROR', name: 'topHolders', error: (e as Error).message });
@@ -507,13 +385,7 @@ function sortAndPaginate(records: any[], sortBy: string, sortDirection: 'asc' | 
 
 self.onmessage = async (e: MessageEvent<WorkerRequest>) => {
   const msg = e.data;
-  if (msg.type === 'RESOLVE_OWNERS') {
-    const resolved = await resolveOwners(msg.records);
-    self.postMessage({ type: 'RESOLVED_OWNERS', records: resolved } as WorkerResponse);
-  } else if (msg.type === 'RESOLVE_OWNERS_BATCH') {
-    const resolvedBatch = await resolveOwnersBatch(msg.records);
-    self.postMessage({ type: 'RESOLVED_OWNERS_BATCH', records: resolvedBatch } as WorkerResponse);
-  } else if (msg.type === 'FILTER_RECORDS') {
+  if (msg.type === 'FILTER_RECORDS') {
     const filtered = filterRecords(msg.records, msg.search);
     self.postMessage({ type: 'FILTERED_RECORDS', records: filtered } as WorkerResponse);
   } else if (msg.type === 'SORT_AND_PAGINATE_RECORDS') {

@@ -1,7 +1,6 @@
 import React, { createContext, useContext, useEffect, useState, useCallback } from 'react';
 import toast from 'react-hot-toast';
-import { fetchAndStoreAllArNS } from '../services/arnsService';
-import { fetchAndMapArns } from '../services/arnsFetchService';
+import { fetchAndStoreAllArNS, getLatestRegistrations } from '../services/arnsService';
 import { 
   requestNotificationPermission, 
   notificationsSupported, 
@@ -88,7 +87,9 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
     try {
       setIsLoading(true);
       
-      const { items: mappedItems } = await fetchAndMapArns(undefined, 30);
+      // Refresh IndexedDB with newest manifest data
+      await fetchAndStoreAllArNS();
+      const mappedItems = await getLatestRegistrations(30);
       
       // Check for new registrations and trigger notifications if enabled
       if (mappedItems.length > 0) {

@@ -1,86 +1,31 @@
-import React, { useState, useEffect } from 'react';
-import { useParams, Link, useNavigate } from 'react-router-dom';
-import { ArrowLeft, Globe, Clock, ExternalLink, ChevronRight, User, Calendar, Hash, Tag, DollarSign, Shield } from 'lucide-react';
+import { FC, useState } from 'react';
+import { useParams, useNavigate } from 'react-router-dom';
+import { ArrowLeft, Globe, Clock, ExternalLink, ChevronRight, User, Calendar, Hash, Tag, DollarSign } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '../components/common/Card';
 import Button from '../components/common/Button';
-import { getArNSDetails, getArnsByOwner } from '../services/arnsService';
-import { ArNSRecord } from '../types';
 import { formatAddress } from '../utils/formatters';
 import NameDetailsTimeline from '../components/nameDetails/NameDetailsTimeline';
 import Badge from '../components/common/Badge';
 import { motion } from 'framer-motion';
+import { useData } from '../contexts/DataContext';
+import PageLoading from '../components/common/PageLoading';
+import ErrorMessage from '../components/common/ErrorMessage';
+import { ArNSRecord } from '../types';
 
-const NameDetails: React.FC = () => {
+const NameDetails: FC = () => {
   const { name } = useParams<{ name: string }>();
   const navigate = useNavigate();
-  const [record, setRecord] = useState<ArNSRecord | null>(null);
-  const [loading, setLoading] = useState<boolean>(true);
-  const [error, setError] = useState<string | null>(null);
   const [showOwnerModal, setShowOwnerModal] = useState(false);
   const [ownerArns, setOwnerArns] = useState<ArNSRecord[]>([]);
   const [viewMode, setViewMode] = useState<'details' | 'timeline'>('details');
+  const { records, loading, error } = useData();
+  const record = records.find(r => r.name === name) || null;
 
-  useEffect(() => {
-    const fetchData = async () => {
-      console.log('NameDetails fetchData called');
-      console.log('Name param:', name);
-      if (!name) return;
-      setLoading(true);
-      setError(null);
-      try {
-        // 1. Try IndexedDB first
-        const { getRecord } = await import('../utils/db');
-        const dbRecord = await getRecord(name);
-        console.log('IndexedDB record fetched in NameDetails:', dbRecord);
-        if (dbRecord) {
-          // Map endTimestamp to expiresAt for backward compatibility
-          if (dbRecord.endTimestamp && !dbRecord.expiresAt) {
-            dbRecord.expiresAt = dbRecord.endTimestamp;
-          }
-          // Instantly use IndexedDB record if owner is present
-          if (dbRecord.owner) {
-            setRecord(dbRecord);
-            setLoading(false);
-            return;
-          }
-          // Fallback: fetch from network ONLY if owner is missing
-          const netRecord = await getArNSDetails(name);
-          if (netRecord && netRecord.owner) {
-            const updatedRecord = {
-              ...dbRecord,
-              owner: netRecord.owner,
-              // Optionally merge other critical fields if needed
-              expiresAt: netRecord.expiresAt || dbRecord.expiresAt,
-              purchasePrice: netRecord.purchasePrice || dbRecord.purchasePrice,
-              contractTxId: netRecord.contractTxId || dbRecord.contractTxId,
-              type: netRecord.type || dbRecord.type,
-            };
-            setRecord(updatedRecord);
-            // Save to IndexedDB so the worker can use the updated info
-            const { saveRecordsSmart } = await import('../utils/db');
-            await saveRecordsSmart([updatedRecord]);
-          } else {
-            setRecord(dbRecord);
-          }
-          setLoading(false);
-        } else {
-          // 2. Fallback to network fetch
-          const data = await getArNSDetails(name);
-          setRecord(data);
-          if (data && data.error) {
-            setError(data.error);
-          } else {
-            setError(null);
-          }
-          setLoading(false);
-        }
-      } catch (err) {
-        setError(`Failed to fetch details for ${name}. Please try again later.`);
-        setLoading(false);
-      }
-    };
-    fetchData();
-  }, [name]);
+  if (loading) return <PageLoading />;
+
+  if (error) return <ErrorMessage message={error} />;
+
+  if (!record) return <ErrorMessage message={`No record found for ${name}`} />;
 
   // Helper to preview content using ar.io URL
   const renderPreview = () => {
@@ -137,151 +82,6 @@ const NameDetails: React.FC = () => {
     animate: { opacity: 1, y: 0, transition: { duration: 0.4 } },
     exit: { opacity: 0, y: -20 }
   };
-
-  if (loading) {
-    return (
-      <motion.div 
-        className="space-y-6"
-        initial="initial"
-        animate="animate"
-        exit="exit"
-        variants={pageVariants}
-      >
-        <motion.div variants={itemVariants} className="animate-pulse">
-          <div className="h-8 w-64 rounded bg-gray-200 dark:bg-gray-700"></div>
-          <div className="mt-2 h-4 w-48 rounded bg-gray-200 dark:bg-gray-700"></div>
-        </motion.div>
-        
-        <motion.div variants={itemVariants}>
-          <Card className="animate-pulse backdrop-blur-md bg-white/80 dark:bg-gray-900/80 border border-gray-200/50 dark:border-gray-800/50 shadow-xl hover:shadow-2xl transition-all duration-300">
-            <CardHeader>
-              <div className="h-6 w-32 rounded bg-gray-200 dark:bg-gray-700"></div>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              {viewMode === 'timeline' ? (
-                <div className="h-40 w-full rounded bg-gray-200 dark:bg-gray-700"></div>
-              ) : (
-                <>
-                  <div className="h-5 w-full rounded bg-gray-200 dark:bg-gray-700"></div>
-                  <div className="h-5 w-full rounded bg-gray-200 dark:bg-gray-700"></div>
-                  <div className="h-5 w-full rounded bg-gray-200 dark:bg-gray-700"></div>
-                  <div className="h-5 w-full rounded bg-gray-200 dark:bg-gray-700"></div>
-                </>
-              )}
-            </CardContent>
-          </Card>
-        </motion.div>
-      </motion.div>
-    );
-  }
-
-  if (error) {
-    return (
-      <motion.div 
-        className="space-y-6"
-        initial="initial"
-        animate="animate"
-        exit="exit"
-        variants={pageVariants}
-      >
-        <motion.div variants={itemVariants}>
-          <Button variant="ghost" className="inline-flex items-center text-blue-600 hover:underline dark:text-blue-400 px-0 transition-all duration-300" onClick={() => navigate(-1)}>
-            <ArrowLeft className="mr-1 h-4 w-4" />
-            Back to Directory
-          </Button>
-          <h1 className="mt-2 text-2xl font-bold text-gray-900 dark:text-white bg-clip-text bg-gradient-to-r from-blue-600 to-purple-600 text-transparent">
-            Name Details
-          </h1>
-        </motion.div>
-        
-        <motion.div variants={itemVariants}>
-          <Card className="backdrop-blur-md bg-white/80 dark:bg-gray-900/80 border border-gray-200/50 dark:border-gray-800/50 shadow-xl transition-all duration-300">
-            <CardContent className="py-12 text-center">
-              <motion.div 
-                initial={{ scale: 0.9, opacity: 0 }}
-                animate={{ scale: 1, opacity: 1 }}
-                transition={{ duration: 0.5 }}
-                className="rounded-md bg-red-50/80 p-4 dark:bg-red-900/30 backdrop-blur-sm"
-              >
-                <div className="flex">
-                  <div className="flex-shrink-0">
-                    <Shield className="h-5 w-5 text-red-500 dark:text-red-400" />
-                  </div>
-                  <div className="ml-3">
-                    <p className="text-sm font-medium text-red-800 dark:text-red-200">{error}</p>
-                  </div>
-                </div>
-              </motion.div>
-              <motion.div 
-                initial={{ y: 20, opacity: 0 }}
-                animate={{ y: 0, opacity: 1 }}
-                transition={{ delay: 0.3, duration: 0.5 }}
-                className="mt-6"
-              >
-                <Button
-                  variant="primary"
-                  className="mt-4 bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 transition-all duration-300 shadow-lg hover:shadow-xl"
-                  onClick={() => window.location.reload()}
-                >
-                  Retry
-                </Button>
-              </motion.div>
-            </CardContent>
-          </Card>
-        </motion.div>
-      </motion.div>
-    );
-  }
-
-  if (!record) {
-    return (
-      <motion.div 
-        className="space-y-6"
-        initial="initial"
-        animate="animate"
-        exit="exit"
-        variants={pageVariants}
-      >
-        <motion.div variants={itemVariants}>
-          <Button variant="ghost" className="inline-flex items-center text-blue-600 hover:underline dark:text-blue-400 px-0 transition-all duration-300" onClick={() => navigate(-1)}>
-            <ArrowLeft className="mr-1 h-4 w-4" />
-            Back to Directory
-          </Button>
-          <h1 className="mt-2 text-2xl font-bold bg-clip-text bg-gradient-to-r from-blue-600 to-purple-600 text-transparent">
-            Name Details
-          </h1>
-        </motion.div>
-        
-        <motion.div variants={itemVariants}>
-          <Card className="backdrop-blur-md bg-white/80 dark:bg-gray-900/80 border border-gray-200/50 dark:border-gray-800/50 shadow-xl hover:shadow-2xl transition-all duration-300">
-            <CardContent className="py-12 text-center">
-              <motion.p 
-                initial={{ opacity: 0, y: 10 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: 0.2 }}
-                className="text-gray-600 dark:text-gray-400"
-              >
-                No record found for the specified name.
-              </motion.p>
-              <motion.div
-                initial={{ opacity: 0, scale: 0.9 }}
-                animate={{ opacity: 1, scale: 1 }}
-                transition={{ delay: 0.4 }}
-              >
-                <Button
-                  variant="primary"
-                  className="mt-4 bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 transition-all duration-300 shadow-lg hover:shadow-xl"
-                  onClick={() => window.location.reload()}
-                >
-                  Retry
-                </Button>
-              </motion.div>
-            </CardContent>
-          </Card>
-        </motion.div>
-      </motion.div>
-    );
-  }
 
   // Animation for main content
   const contentVariants = {
@@ -424,11 +224,10 @@ const NameDetails: React.FC = () => {
                           </a>
                           <button 
                             className="text-xs text-blue-500 hover:text-blue-700 dark:hover:text-blue-300 hover:underline transition-colors flex items-center"
-                            onClick={async () => {
+                            onClick={() => {
                               setShowOwnerModal(true);
                               if (ownerArns.length === 0 && record.owner) {
-                                const grouped = await getArnsByOwner();
-                                setOwnerArns(grouped?.[record.owner] || []);
+                                setOwnerArns(records.filter(r => r.owner === record.owner && r.name !== record.name));
                               }
                             }}
                           >
@@ -474,8 +273,8 @@ const NameDetails: React.FC = () => {
                                 animate={{ opacity: 1, y: 0 }}
                                 transition={{ delay: idx * 0.05 }}
                               >
-                                <Link
-                                  to={`/name/${r.name}`}
+                                <a
+                                  href={`/name/${r.name}`}
                                   className={`font-mono text-blue-700 dark:text-blue-300 hover:underline flex items-center ${r.name === record.name ? 'pointer-events-none opacity-60' : ''}`}
                                   onClick={() => setShowOwnerModal(false)}
                                 >
@@ -484,7 +283,7 @@ const NameDetails: React.FC = () => {
                                   {r.name === record.name && (
                                     <span className="ml-2 bg-blue-200/80 dark:bg-blue-800/80 text-blue-800 dark:text-blue-200 px-2 rounded text-xs backdrop-blur-sm">(current)</span>
                                   )}
-                                </Link>
+                                </a>
                               </motion.li>
                             ))}
                           </ul>

@@ -1,4 +1,4 @@
-# OMNIS - ArNS Explorer Documentation
+# ArNS Explorer Documentation
 
 ## Table of Contents
 1. [Introduction](#introduction)
@@ -11,7 +11,7 @@
    - [LiveFeed Page](#livefeed-page)
    - [Name Details Timeline](#name-details-timeline)
    - [Analytics Page](#analytics-page)
-   - [Global Owner Resolution Indicator](#global-owner-resolution-indicator)
+   - [Global Activity Indicator](#global-activity-indicator)
    - [CSV Export Utility](#csv-export-utility)
 7. [Architecture & Data Flow](#architecture--data-flow)
    - [Web Worker (`arnsWorker.ts`)](#web-worker-arnsworkerts)
@@ -28,7 +28,7 @@
 ---
 
 ## Introduction
-OMNIS - ArNS Explorer is a React+TypeScript web application for browsing, filtering, and resolving ArNS name records. It showcases a directory of records, a live feed, and analytics, while offloading intensive tasks to a Web Worker and persisting data via IndexedDB.
+ArNS Explorer is a React+TypeScript web application for browsing, filtering, and resolving ArNS name records. It showcases a directory of records, a live feed, and analytics, while offloading intensive tasks to a Web Worker and persisting data via IndexedDB.
 
 ## Technology Stack
 - React with TypeScript
@@ -42,27 +42,53 @@ OMNIS - ArNS Explorer is a React+TypeScript web application for browsing, filter
 ## Project Structure
 ```
 project/
+├── backend/                   # Node.js cron backend (fetch & upload jobs)
 ├── docs/                     # Project documentation
-│   └── PROJECT_DOCUMENTATION.md
-├── src/
-│   ├── components/
-│   │   ├── layout/           # Header, Footer, Layout, Global indicator
-│   │   └── common/           # Reusable components (Card, Logo, etc.)
-│   ├── pages/                # Route-based pages (Directory, LiveFeed, Analytics)
-│   ├── services/             # Worker client (arnsWorkerClient.ts)
-│   ├── arnsWorker.ts         # Web Worker entry point
-│   └── types/                # Shared TypeScript types
-├── public/                   # Static assets
-├── tailwind.config.js        # Tailwind CSS config
-├── package.json              # Scripts & dependencies
-└── tsconfig.json             # TypeScript config
+├── src/                      # Frontend source code
+│   ├── components/          # UI components
+│   ├── contexts/            # React contexts
+│   ├── hooks/               # Custom hooks
+│   ├── pages/               # Route pages (Directory, LiveFeed, etc.)
+│   ├── services/            # Data services & worker client
+│   ├── utils/               # Helper functions
+│   └── arnsWorker.ts        # Web Worker entry point
+├── public/                  # Static assets
+├── docs/                    # Project documentation
+├── tailwind.config.js       # Tailwind CSS config
+├── package.json             # Frontend scripts & dependencies
+├── tsconfig.json            # Frontend TypeScript config
+└── vite.config.ts           # Vite configuration
 ```
 
 ## Installation & Setup
-1. Clone the repo: `git clone https://github.com/Aluisyo/OMNIS`
-2. Install dependencies: `npm install`
-3. Start development server: `npm run dev`
-4. Build for production: `npm run build`
+
+#### Prerequisites
+
+- Node.js 16+ and npm (or yarn)
+
+#### Clone repository
+```bash
+git clone https://github.com/Aluisyo/OMNIS
+cd OMNIS
+```
+
+#### Frontend Setup
+```bash
+# Install dependencies
+npm install
+# Start development server
+npm run dev
+```
+
+#### Backend Setup
+```bash
+# Navigate to backend directory
+cd backend
+# Install dependencies
+npm install
+# Start backend (build + run with cron jobs)
+npm run dev
+```
 
 ## Development Workflow
 - Organize code by feature: pages, components, services.
@@ -96,12 +122,12 @@ project/
 - Offloads analytics computations to the Web Worker.
 - Displays charts and summary statistics.
 
-### Global Owner Resolution Indicator
-- Floating resolution status dot at bottom-right, indicating owner resolution progress.
-- Colors: red on errors, orange during pending resolution, green on successful completion, and resets on new cycles.
-- Resolves only missing owners in IndexedDB to minimize redundant API calls, triggered via `resolveMissingOwnersInDB`.
-- Tooltip shows “Resolving owners: X of Y” progress or detailed error messages.
-- Accessible via `aria-label` and native `title`.
+### Global Activity Indicator
+- Floating activity status dot at bottom-right, indicating app data loading or refresh operations.
+- Color: amber (`#F59E0B`) pulsing while loading or refreshing.
+- Visible only during loading or refresh operations.
+- Tooltip shows “Loading ARNS data...” or “Refreshing ARNS data...” based on context.
+- Accessible via `aria-label` and `title`.
 
 ### CSV Export Utility
 - Dropdown for export options and page range input.
@@ -141,8 +167,22 @@ project/
 - Lint via `npm run lint`.
 
 ## Deployment
-- Build static assets via `npm run build`.
-- Deploy to Netlify, Vercel, or any static host.
+
+#### Frontend
+```bash
+cd OMNIS
+npm run build
+```
+- Deploy contents of `dist/` to any static host (Arweave, Netlify, Vercel, S3, etc.)
+
+#### Backend
+```bash
+cd OMNIS/backend
+npm install    # if not already installed
+npm run build  # compile TypeScript
+npm start      # runs `dist/index.js` and schedules cron jobs
+```
+- Cron schedule is configured in `backend/src/config.ts` (`CRON_SCHEDULE`). Run as a long-lived process (e.g., via pm2, systemd, or Docker).
 
 ## Contributing
 1. Fork the repo and create a feature branch.

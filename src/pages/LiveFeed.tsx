@@ -1,7 +1,6 @@
-import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { Card, CardHeader, CardTitle, CardContent } from '../components/common/Card';
-import { getAllArnsFromDB } from '../services/arnsService';
-import { fetchAndMapArns } from '../services/arnsFetchService';
+import { useData } from '../contexts/DataContext';
 import { calculateAnalyticsStatsInWorker } from '../services/arnsWorkerClient';
 import { ArNSRecord } from '../types';
 import { formatAddress, formatNumber } from '../utils/formatters';
@@ -12,16 +11,22 @@ import { motion, AnimatePresence } from 'framer-motion';
 const LiveFeed: React.FC = () => {
   const navigate = useNavigate();
   const [page, setPage] = useState(1);
-  // Stats state
+  const { records, loading: dataLoading, error: dataError } = useData();
   const [stats, setStats] = useState<any | null>(null);
   const [statsLoading, setStatsLoading] = useState<boolean>(true);
   const [statsError, setStatsError] = useState<string | null>(null);
-  
   const [registrations, setRegistrations] = useState<ArNSRecord[]>([]);
-  const [dbLoaded, setDbLoaded] = useState(false);
   const [dbCount, setDbCount] = useState<number>(0);
-  const [allRecords, setAllRecords] = useState<ArNSRecord[]>([]);
-  const latestSeenTimestamp = useRef<number>(0);
+
+  const sortedRecords = useMemo(
+    () => [...mapExpires(records)].sort((a, b) => (b.startTimestamp || 0) - (a.startTimestamp || 0)),
+    [records]
+  );
+
+  useEffect(() => {
+    setDbCount(sortedRecords.length);
+    setRegistrations(sortedRecords.slice(0, page * 30));
+  }, [sortedRecords, page]);
 
   // Properly map endTimestamp to expiresAt for lease records
   function mapExpires(records: ArNSRecord[]): ArNSRecord[] {
@@ -45,94 +50,26 @@ const LiveFeed: React.FC = () => {
     });
   }
 
-  // On first load, read all cached records and initialize pagination
+  // Fetch stats whenever records update
   useEffect(() => {
-    let mounted = true;
-    (async () => {
-      const dbAll: ArNSRecord[] = await getAllArnsFromDB();
-      const sorted = dbAll.sort((a: ArNSRecord, b: ArNSRecord) => (b.startTimestamp ?? 0) - (a.startTimestamp ?? 0));
-      const mapped = mapExpires(sorted);
-      if (mounted) {
-        setAllRecords(mapped);
-        setDbCount(mapped.length);
-        setRegistrations(mapped.slice(0, page * 30));
-        setDbLoaded(true);
-      }
-    })();
-    return () => { mounted = false; };
-  }, []);
-
-  // Poll only new records (deltas) with smart mapping
-  useEffect(() => {
-    if (!dbLoaded) return;
-    // Initialize last seen timestamp
-    latestSeenTimestamp.current = registrations.reduce(
-      (max, r) => Math.max(max, r.startTimestamp || 0),
-      0
-    );
-    let mounted = true;
-    const fetchDeltas = async () => {
-      if (mounted) setError(null);
-      try {
-        // Fetch and map, skipping existing owners
-        const { items: mapped } = await fetchAndMapArns(undefined, 30);
-        const expiresMapped = mapExpires(mapped);
-        if (!mounted || expiresMapped.length === 0) return;
-        setAllRecords(prev => [...expiresMapped, ...prev]);
-        setRegistrations(expiresMapped.slice(0, page * 30));
-        // Update timestamp
-        latestSeenTimestamp.current = Math.max(
-          latestSeenTimestamp.current,
-          ...expiresMapped.map(item => item.startTimestamp || 0)
-        );
-      } catch (e) {
-        if (mounted) setError('Failed to fetch live records');
-      }
-    };
-    fetchDeltas();
-    const intervalId = setInterval(fetchDeltas, 300000);
-    return () => {
-      mounted = false;
-      clearInterval(intervalId);
-    };
-  }, [dbLoaded]);
-
-  // Fetch stats on mount and whenever records or cache count change
-  useEffect(() => {
+    if (dataLoading || dataError) return;
     let mounted = true;
     setStatsLoading(true);
     setStatsError(null);
-    
-    const fetchStats = async () => {
+    (async () => {
       try {
-        // Get all records from the database
-        const allRecords = await getAllArnsFromDB();
-        
-        // Use the worker to calculate all stats (includes active permabuys, active leases, unique owners)
-        const { stats } = await calculateAnalyticsStatsInWorker(allRecords);
-        
-        // The worker has calculated everything we need
+        const { stats: s } = await calculateAnalyticsStatsInWorker(records);
         if (mounted) {
-          setStats({
-            ...stats,
-            // Ensure values are present and fallback to defaults if not
-            totalRegistrations: stats.totalRegistrations || allRecords.length,
-            activePermabuys: stats.activePermabuys || 0,
-            activeLeases: stats.activeLeases || 0,
-            uniqueOwners: stats.uniqueOwners || 0
-          });
+          setStats({ ...s, totalRegistrations: s.totalRegistrations || records.length });
         }
-      } catch (error) {
+      } catch (err) {
         if (mounted) setStatsError('Failed to load stats');
       } finally {
         if (mounted) setStatsLoading(false);
       }
-    };
-    
-    fetchStats();
+    })();
     return () => { mounted = false; };
-  }, [registrations, dbCount]);
-  const [error, setError] = useState<string | null>(null);
+  }, [records, dataLoading, dataError]);
 
   function formatIO(winston: string | number | undefined) {
     if (!winston) return '-';
@@ -182,15 +119,7 @@ const LiveFeed: React.FC = () => {
   }), []);
 
   // Show More: simply increment page to load next slice
-  const handleShowMore = useCallback(() => {
-    setPage(p => p + 1);
-  }, []);
-
-  // When page changes, re-slice registrations from cached allRecords
-  useEffect(() => {
-    if (!dbLoaded) return;
-    setRegistrations(allRecords.slice(0, page * 30));
-  }, [page, dbLoaded, allRecords]);
+  const handleShowMore = useCallback(() => setPage(p => p + 1), []);
 
   return (
     <motion.div 
@@ -210,7 +139,7 @@ const LiveFeed: React.FC = () => {
         className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5"
       >
         {/* Total Registrations */}
-        <motion.div variants={cardVariants}>
+        <motion.div key="totalRegistrations" variants={cardVariants}>
           <Card>
             <CardHeader>
               <CardTitle>
@@ -262,7 +191,7 @@ const LiveFeed: React.FC = () => {
         </motion.div>
 
         {/* Active Permabuys */}
-        <motion.div variants={cardVariants}>
+        <motion.div key="activePermabuys" variants={cardVariants}>
           <Card>
             <CardHeader>
               <CardTitle>
@@ -314,7 +243,7 @@ const LiveFeed: React.FC = () => {
         </motion.div>
 
         {/* Active Leases */}
-        <motion.div variants={cardVariants}>
+        <motion.div key="activeLeases" variants={cardVariants}>
           <Card>
             <CardHeader>
               <CardTitle>
@@ -366,7 +295,7 @@ const LiveFeed: React.FC = () => {
         </motion.div>
 
         {/* Daily Registrations */}
-        <motion.div variants={cardVariants}>
+        <motion.div key="dailyRegistrations" variants={cardVariants}>
           <Card>
             <CardHeader>
               <CardTitle>
@@ -420,7 +349,7 @@ const LiveFeed: React.FC = () => {
       
       {/* Error message */}
       <AnimatePresence>
-        {error && (
+        {dataError && (
           <motion.div 
             initial={{ opacity: 0, y: -10 }}
             animate={{ opacity: 1, y: 0 }}
@@ -434,7 +363,7 @@ const LiveFeed: React.FC = () => {
                 </svg>
               </div>
               <div className="ml-3">
-                <p className="text-sm font-medium text-accent-red">{error}</p>
+                <p className="text-sm font-medium text-accent-red">{dataError}</p>
               </div>
             </div>
           </motion.div>
@@ -462,7 +391,7 @@ const LiveFeed: React.FC = () => {
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-200/50 dark:divide-white/5">
-              {!dbLoaded ? (
+              {dataLoading ? (
                 <>
                   {Array.from({ length: 5 }).map((_, idx) => (
                     <tr key={idx}>
@@ -484,83 +413,80 @@ const LiveFeed: React.FC = () => {
                   </td>
                 </tr>
               ) : (
-                [...registrations]
-                  .sort((a, b) => (b.startTimestamp ?? 0) - (a.startTimestamp ?? 0))
-                  .slice(0, page * 30)
-                  .map((record, index) => (
-                    <motion.tr 
-                      key={record.id} 
-                      initial={{ opacity: 0, y: 10 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      transition={{ delay: index * 0.03, duration: 0.2 }}
-                      className="hover:bg-gray-50/80 dark:hover:bg-dark-200/30 transition-colors duration-150"
-                    >
-                      <td className="px-4 py-3">
-                        <span
-                          onClick={() => navigate(`/name/${record.name}`)}
-                          className="font-mono text-primary-600 dark:text-accent-blue cursor-pointer hover:underline font-medium"
-                        >
-                          {record.name}
+                registrations.map((record: ArNSRecord, index: number) => (
+                  <motion.tr 
+                    key={record.id} 
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: index * 0.03, duration: 0.2 }}
+                    className="hover:bg-gray-50/80 dark:hover:bg-dark-200/30 transition-colors duration-150"
+                  >
+                    <td className="px-4 py-3">
+                      <span
+                        onClick={() => navigate(`/name/${record.name}`)}
+                        className="font-mono text-primary-600 dark:text-accent-blue cursor-pointer hover:underline font-medium"
+                      >
+                        {record.name}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3">
+                      {record.type === 'lease' ? (
+                        <span className="inline-flex items-center rounded-full bg-primary-50 dark:bg-accent-blue/10 px-2.5 py-0.5 text-xs font-medium text-primary-600 dark:text-accent-blue">
+                          Lease
                         </span>
-                      </td>
-                      <td className="px-4 py-3">
-                        {record.type === 'lease' ? (
-                          <span className="inline-flex items-center rounded-full bg-primary-50 dark:bg-accent-blue/10 px-2.5 py-0.5 text-xs font-medium text-primary-600 dark:text-accent-blue">
-                            Lease
-                          </span>
-                        ) : record.type === 'permabuy' ? (
-                          <span className="inline-flex items-center rounded-full bg-accent-green/10 px-2.5 py-0.5 text-xs font-medium text-accent-green">
-                            Permabuy
-                          </span>
-                        ) : (
-                          <span className="inline-flex items-center rounded-full bg-gray-100 dark:bg-gray-800 px-2.5 py-0.5 text-xs font-medium text-gray-600 dark:text-gray-300">
-                            {record.type}
-                          </span>
-                        )}
-                      </td>
-                      <td className="truncate px-4 py-3">
-                        <span
-                          className="font-mono text-primary-600 dark:text-accent-blue cursor-pointer hover:underline"
-                          onClick={() => {
-                            if (record.owner) {
-                              navigate(`/directory?search=${encodeURIComponent(record.owner)}`);
-                            }
-                          }}
-                        >
-                          {formatAddress(record.owner || '')}
+                      ) : record.type === 'permabuy' ? (
+                        <span className="inline-flex items-center rounded-full bg-accent-green/10 px-2.5 py-0.5 text-xs font-medium text-accent-green">
+                          Permabuy
                         </span>
-                      </td>
-                      <td className="px-4 py-3 text-gray-600 dark:text-dark-600">
-                        {record.startTimestamp ? new Date(record.startTimestamp).toLocaleString() : '-'}
-                      </td>
-                      <td className="font-mono px-4 py-3 text-sm text-gray-600 dark:text-gray-400">
-                        {record.type === 'lease' ? (
-                          record.expiresAt ? (
-                            new Date(record.expiresAt).toLocaleString()
-                          ) : (record as any).endTimestamp ? (
-                            new Date((record as any).endTimestamp).toLocaleString()
-                          ) : '-'
-                        ) : record.type === 'permabuy' ? (
-                          <span className="inline-flex items-center rounded-full bg-accent-green/10 px-2.5 py-0.5 text-xs font-medium text-accent-green">
-                            Never
-                          </span>
-                        ) : (
-                          '-'
-                        )}
-                      </td>
-                      <td className="font-mono text-xs text-primary-600 dark:text-accent-blue px-4 py-3">
-                        {(record.processId || record.contractTxId) ? (
-                          <a href={`https://ao.link/#/token/${record.processId || record.contractTxId}`} 
-                             target="_blank" 
-                             rel="noopener noreferrer" 
-                             className="hover:underline hover:text-primary-700 dark:hover:text-accent-blue/80 transition-colors duration-150">
-                            {((record.processId || record.contractTxId) || '').slice(0, 8)}...{((record.processId || record.contractTxId) || '').slice(-6)}
-                          </a>
-                        ) : '-'}
-                      </td>
-                      <td className="px-4 py-3 text-accent-green dark:text-accent-green/90">{formatIO(record.purchasePrice)}</td>
-                    </motion.tr>
-                  ))
+                      ) : (
+                        <span className="inline-flex items-center rounded-full bg-gray-100 dark:bg-gray-800 px-2.5 py-0.5 text-xs font-medium text-gray-600 dark:text-gray-300">
+                          {record.type}
+                        </span>
+                      )}
+                    </td>
+                    <td className="truncate px-4 py-3">
+                      <span
+                        className="font-mono text-primary-600 dark:text-accent-blue cursor-pointer hover:underline"
+                        onClick={() => {
+                          if (record.owner) {
+                            navigate(`/directory?search=${encodeURIComponent(record.owner)}`);
+                          }
+                        }}
+                      >
+                        {formatAddress(record.owner || '')}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3 text-gray-600 dark:text-dark-600">
+                      {record.startTimestamp ? new Date(record.startTimestamp).toLocaleString() : '-'}
+                    </td>
+                    <td className="font-mono px-4 py-3 text-sm text-gray-600 dark:text-gray-400">
+                      {record.type === 'lease' ? (
+                        record.expiresAt ? (
+                          new Date(record.expiresAt).toLocaleString()
+                        ) : (record as any).endTimestamp ? (
+                          new Date((record as any).endTimestamp).toLocaleString()
+                        ) : '-'
+                      ) : record.type === 'permabuy' ? (
+                        <span className="inline-flex items-center rounded-full bg-accent-green/10 px-2.5 py-0.5 text-xs font-medium text-accent-green">
+                          Never
+                        </span>
+                      ) : (
+                        '-'
+                      )}
+                    </td>
+                    <td className="font-mono text-xs text-primary-600 dark:text-accent-blue px-4 py-3">
+                      {(record.processId || record.contractTxId) ? (
+                        <a href={`https://ao.link/#/token/${record.processId || record.contractTxId}`} 
+                           target="_blank" 
+                           rel="noopener noreferrer" 
+                           className="hover:underline hover:text-primary-700 dark:hover:text-accent-blue/80 transition-colors duration-150">
+                          {((record.processId || record.contractTxId) || '').slice(0, 8)}...{((record.processId || record.contractTxId) || '').slice(-6)}
+                        </a>
+                      ) : '-'}
+                    </td>
+                    <td className="px-4 py-3 text-accent-green dark:text-accent-green/90">{formatIO(record.purchasePrice)}</td>
+                  </motion.tr>
+                ))
               )}
             </tbody>
           </table>

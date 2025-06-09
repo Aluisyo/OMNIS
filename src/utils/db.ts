@@ -40,11 +40,20 @@ export async function saveRecordsSmart(records: any[]) {
     if (!existing) {
       await tx.store.put(rec);
     } else {
-      // Only update if owner is non-empty and different
+      // Merge new owner or expiration if changed
+      let shouldUpdate = false;
+      const updated: any = { ...existing };
       if (rec.owner && rec.owner !== existing.owner) {
-        await tx.store.put({ ...existing, ...rec });
+        updated.owner = rec.owner;
+        shouldUpdate = true;
       }
-      // Otherwise, preserve the existing record
+      if (rec.expiresAt != null && rec.expiresAt !== existing.expiresAt) {
+        updated.expiresAt = rec.expiresAt;
+        shouldUpdate = true;
+      }
+      if (shouldUpdate) {
+        await tx.store.put(updated);
+      }
     }
   }
   await tx.done;
@@ -64,4 +73,3 @@ export async function clearRecords() {
   const db = await getDB();
   await db.clear('records');
 }
-
