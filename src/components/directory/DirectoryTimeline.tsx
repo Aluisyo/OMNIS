@@ -2,6 +2,7 @@ import React from 'react';
 import { ArNSRecord } from '../../types';
 import { Calendar, Users, Tag, ExternalLink, Activity } from 'lucide-react';
 import { formatIO } from './ArNSTable';
+import { decodeName } from '../../utils/punycode';
 import { Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
 
@@ -167,7 +168,7 @@ const DirectoryTimeline: React.FC<DirectoryTimelineProps> = ({
                         }
                       }}
                     >
-                      {record.name}
+                      {decodeName(record.name)}
                       <ExternalLink className="h-3.5 w-3.5 ml-1.5 opacity-0 group-hover:opacity-100 transition-opacity duration-200" />
                     </Link>
                     <span className={`text-xs rounded-full px-2.5 py-1 shadow-sm backdrop-blur-sm flex items-center ${

@@ -5,6 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '../components/common/C
 import Button from '../components/common/Button';
 import Badge from '../components/common/Badge';
 import { formatAddress } from '../utils/formatters';
+import { decodeName } from '../utils/punycode';
 import NameDetailsTimeline from '../components/nameDetails/NameDetailsTimeline';
 import { motion } from 'framer-motion';
 import { useData } from '../contexts/DataContext';
@@ -132,7 +133,7 @@ const NameDetails: FC = () => {
             Back to Directory
           </Button>
           <h1 className="mt-2 text-2xl font-bold bg-clip-text bg-gradient-to-r from-blue-600 to-purple-600 text-transparent">
-            {record.name}
+            {decodeName(record.name)}
             {typeInfo && (
               <Badge variant={typeInfo.variant as any} className="ml-2 transition-all duration-300">{typeInfo.label}</Badge>
             )}
@@ -159,7 +160,7 @@ const NameDetails: FC = () => {
               >
                 <CardTitle className="text-xl font-semibold bg-clip-text bg-gradient-to-r from-blue-600 to-indigo-600 text-transparent flex items-center gap-2">
                   <Globe className="h-5 w-5 text-blue-500" />
-                  <span className="font-mono">{record.name}</span>
+                  <span className="font-mono">{decodeName(record.name)}</span>
                 </CardTitle>
                 
                 <div className="flex items-center space-x-2">
@@ -334,11 +335,11 @@ const NameDetails: FC = () => {
               ×
             </button>
             <h2 className="text-lg font-semibold mb-4 bg-clip-text bg-gradient-to-r from-blue-600 to-purple-600 text-transparent">
-              Undernames for {record.name}
+              Undernames for {decodeName(record.name)}
             </h2>
             {(record.underNames?.length ?? record.undernames ?? 0) === 0 ? (
               <div className="text-gray-600 dark:text-gray-400 p-4 text-center">
-                No undernames found for {record.name}.
+                No undernames found for {decodeName(record.name)}.
               </div>
             ) : (
               <ul className="space-y-2 divide-y divide-gray-100 dark:divide-gray-800">
@@ -356,7 +357,7 @@ const NameDetails: FC = () => {
                       onClick={() => setShowUndernamesModal(false)}
                     >
                       <Hash className="h-4 w-4 mr-2 text-blue-500" />
-                      {u.name}
+                      {decodeName(u.name)}
                     </Link>
                   </motion.li>
                 ))}
@@ -403,7 +404,7 @@ const NameDetails: FC = () => {
                       onClick={() => setShowOwnerModal(false)}
                     >
                       <Globe className="h-4 w-4 mr-2 text-blue-500" />
-                      {r.name}
+                      {decodeName(r.name)}
                       {r.name === record.name && (
                         <span className="ml-2 bg-blue-200/80 dark:bg-blue-800/80 text-blue-800 dark:text-blue-200 px-2 rounded text-xs backdrop-blur-sm">(current)</span>
                       )}

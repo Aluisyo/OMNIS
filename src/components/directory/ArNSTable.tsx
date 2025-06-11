@@ -2,6 +2,7 @@ import React from 'react';
 import { ChevronLeft, ChevronRight, ArrowUp, ArrowDown } from 'lucide-react';
 import { ArNSRecord } from '../../types';
 import { formatAddress } from '../../utils/formatters';
+import { decodeName } from '../../utils/punycode';
 import { useNavigate } from 'react-router-dom';
 import Button from '../common/Button';
 import { motion } from 'framer-motion';
@@ -156,7 +157,7 @@ const ArNSTable: React.FC<ArNSTableProps> = ({
                       <td className="whitespace-nowrap px-3 py-3">
                         <span className="text-blue-600 dark:text-blue-400 font-medium transition-all duration-200 hover:text-blue-700 dark:hover:text-blue-300 hover:underline" 
                               onClick={() => navigate(`/name/${record.name}`)}>
-                          {record.name}
+                          {decodeName(record.name)}
                         </span>
                       </td>
                       <td className="whitespace-nowrap px-2 py-3 text-sm">
@@ -242,7 +243,7 @@ const ArNSTable: React.FC<ArNSTableProps> = ({
                     onClick={() => navigate(`/name/${record.name}`)}
                   >
                     <div className="flex justify-between items-center mb-2">
-                      <h3 className="text-blue-600 dark:text-blue-400 font-medium">{record.name}</h3>
+                      <h3 className="text-blue-600 dark:text-blue-400 font-medium">{decodeName(record.name)}</h3>
                       {record.type === 'lease' ? (
                         <span className="inline-block rounded-full bg-blue-500/90 dark:bg-blue-600/90 backdrop-blur-sm px-2 py-0.5 text-xs font-medium text-white shadow-sm">Lease</span>
                       ) : record.type === 'permabuy' ? (

@@ -7,6 +7,7 @@ import { formatAddress, formatNumber } from '../utils/formatters';
 import { useNavigate } from 'react-router-dom';
 import { Activity, TrendingUp, Users, Clock, Award, Search } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { decodeName } from '../utils/punycode';
 
 const LiveFeed: React.FC = () => {
   const navigate = useNavigate();
@@ -426,7 +427,7 @@ const LiveFeed: React.FC = () => {
                         onClick={() => navigate(`/name/${record.name}`)}
                         className="font-mono text-primary-600 dark:text-accent-blue cursor-pointer hover:underline font-medium"
                       >
-                        {record.name}
+                        {decodeName(record.name)}
                       </span>
                     </td>
                     <td className="px-4 py-3">
