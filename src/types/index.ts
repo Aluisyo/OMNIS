@@ -8,6 +8,8 @@ export interface ArNSRecord {
   startTimestamp?: number;
   type?: string;
   undernames?: number;
+  // Array of undername details
+  underNames?: { name: string; tx: string }[];
   expiresAt?: number | null;
   price?: string;
   contractTxId?: string;
@@ -17,6 +19,8 @@ export interface ArNSRecord {
   tags?: string[];
   active?: boolean;
   error?: string;
+  /** Primary name if this record is an undername pointing to another record */
+  primaryName?: string;
 }
 
 export interface ArNSStats {

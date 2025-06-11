@@ -19,7 +19,7 @@ import {
   PieChart,
   Pie
 } from 'recharts';
-import { Activity, TrendingUp, Calendar, DollarSign, Users, Lock, RefreshCw } from 'lucide-react';
+import { Activity, TrendingUp, Calendar, DollarSign, Users, Lock, RefreshCw, Tag, Hash } from 'lucide-react';
 import { Card, CardHeader, CardContent, CardTitle } from '../components/common/Card';
 import Button from '../components/common/Button';
 import { calculateAnalyticsStatsInWorker, onResolutionProgress } from '../services/arnsWorkerClient';
@@ -292,6 +292,13 @@ const Analytics: FC = () => {
       .filter(d => new Date(d.date).getTime() >= oneYearAgo.getTime() && d.date !== '2024-12-26' && d.date !== '2025-02-20')
       .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
   }, [dailyCounts]);
+
+  // Primary/undernames stats
+  const totalPrimaryNames = useMemo(() => records.filter(r => (r.underNames?.length ?? 0) > 0).length, [records]);
+  const totalUndernames = useMemo(
+    () => records.reduce((sum, r) => sum + (r.underNames?.length ?? r.undernames ?? 0), 0),
+    [records]
+  );
 
   // Animation variants
   const pageVariants = {
@@ -632,6 +639,53 @@ const Analytics: FC = () => {
                 </Card>
               </motion.div>
               
+              {/* Primary Names Card */}
+              <motion.div 
+                variants={itemVariants} 
+                whileHover={{ y: -5 }} 
+                transition={{ type: "spring", stiffness: 300 }}
+              >
+                <Card className="bg-white/70 dark:bg-dark-100/40 backdrop-blur-sm border border-gray-200/50 dark:border-white/5 shadow-sm hover:shadow-md transition-all duration-200">
+                  <CardHeader className="p-4 flex flex-row items-center justify-between space-y-0 pb-2">
+                    <CardTitle className="text-sm font-medium">Total Primary Names</CardTitle>
+                    <div className="h-8 w-8 rounded-full bg-purple-100/80 dark:bg-purple-900/30 flex items-center justify-center">
+                      <Tag className="h-4 w-4 text-purple-600 dark:text-purple-400" />
+                    </div>
+                  </CardHeader>
+                  <CardContent className="p-4 pt-0">
+                    <div className="text-2xl font-bold bg-gradient-to-r from-purple-600 to-purple-400 dark:from-purple-400 dark:to-violet-300 bg-clip-text text-transparent">
+                      {formatNumber(totalPrimaryNames)}
+                    </div>
+                    <p className="text-xs text-gray-600 dark:text-gray-400">
+                      Total Primary Names
+                    </p>
+                  </CardContent>
+                </Card>
+              </motion.div>
+              
+              {/* Undernames Card */}
+              <motion.div 
+                variants={itemVariants} 
+                whileHover={{ y: -5 }} 
+                transition={{ type: "spring", stiffness: 300 }}
+              >
+                <Card className="bg-white/70 dark:bg-dark-100/40 backdrop-blur-sm border border-gray-200/50 dark:border-white/5 shadow-sm hover:shadow-md transition-all duration-200">
+                  <CardHeader className="p-4 flex flex-row items-center justify-between space-y-0 pb-2">
+                    <CardTitle className="text-sm font-medium">Total Undernames</CardTitle>
+                    <div className="h-8 w-8 rounded-full bg-blue-100/80 dark:bg-blue-900/30 flex items-center justify-center">
+                      <Hash className="h-4 w-4 text-blue-600 dark:text-blue-400" />
+                    </div>
+                  </CardHeader>
+                  <CardContent className="p-4 pt-0">
+                    <div className="text-2xl font-bold bg-gradient-to-r from-blue-600 to-blue-400 dark:from-blue-400 dark:to-indigo-300 bg-clip-text text-transparent">
+                      {formatNumber(totalUndernames)}
+                    </div>
+                    <p className="text-xs text-gray-600 dark:text-gray-400">
+                      Total Undernames
+                    </p>                  </CardContent>
+                </Card>
+              </motion.div>
+              
               <motion.div 
                 variants={itemVariants} 
                 whileHover={{ y: -5 }} 
@@ -650,41 +704,6 @@ const Analytics: FC = () => {
                     </div>
                     <p className="text-xs text-gray-600 dark:text-gray-400">
                       average purchase price
-                    </p>
-                  </CardContent>
-                </Card>
-              </motion.div>
-              
-              <motion.div 
-                variants={itemVariants} 
-                whileHover={{ y: -5 }} 
-                transition={{ type: "spring", stiffness: 300 }}
-              >
-                <Card className="bg-white/70 dark:bg-dark-100/40 backdrop-blur-sm border border-gray-200/50 dark:border-white/5 shadow-sm hover:shadow-md transition-all duration-200">
-                  <CardHeader className="p-4 flex flex-row items-center justify-between space-y-0 pb-2">
-                    <CardTitle className="text-sm font-medium">Growth Rate</CardTitle>
-                    <div className="h-8 w-8 rounded-full bg-pink-100/80 dark:bg-pink-900/30 flex items-center justify-center">
-                      <TrendingUp className="h-4 w-4 text-pink-600 dark:text-pink-400" />
-                    </div>
-                  </CardHeader>
-                  <CardContent className="p-4 pt-0">
-                    {(() => {
-                      const growth = calculateGrowth();
-                      const value = parseFloat(growth.growthStr);
-                      const gradientClass = value > 0 
-                        ? 'bg-gradient-to-r from-green-600 to-green-400 dark:from-green-400 dark:to-emerald-300' 
-                        : value < 0 
-                          ? 'bg-gradient-to-r from-red-600 to-red-400 dark:from-red-400 dark:to-rose-300' 
-                          : 'bg-gradient-to-r from-gray-600 to-gray-400 dark:from-gray-400 dark:to-gray-300';
-                      const arrow = value > 0 ? '↑' : value < 0 ? '↓' : '';
-                      return (
-                        <div className={`text-2xl font-bold ${gradientClass} bg-clip-text text-transparent`}>
-                          {arrow} {growth.growthStr}
-                        </div>
-                      );
-                    })()} 
-                    <p className="text-xs text-gray-600 dark:text-gray-400">
-                      monthly registrations trend
                     </p>
                   </CardContent>
                 </Card>
@@ -785,68 +804,6 @@ const Analytics: FC = () => {
                           activeDot={{ r: 6 }}
                         />
                       </LineChart>
-                    </ResponsiveContainer>
-                  </div>
-                </CardContent>
-              </Card>
-            </motion.div>
-
-            {/* Growth Rate Chart */}
-            <motion.div
-              variants={itemVariants}
-              initial="hidden"
-              animate="visible"
-              className="mt-6"
-            >
-              <Card className="bg-white/70 dark:bg-dark-100/40 backdrop-blur-sm border border-gray-200/50 dark:border-white/5 shadow-sm hover:shadow-md transition-all duration-200">
-                <CardHeader className="flex flex-row items-center justify-between p-4 border-b border-gray-100/50 dark:border-gray-800/50">
-                  <CardTitle className="text-lg font-semibold bg-gradient-to-r from-primary-600 to-primary-400 dark:from-accent-blue dark:to-accent-lavender bg-clip-text text-transparent">Monthly Growth Rate</CardTitle>
-                </CardHeader>
-                <CardContent className="p-0 pt-4">
-                  <div className="h-[300px] md:h-[400px] w-full">
-                    <ResponsiveContainer width="100%" height="100%">
-                      <BarChart
-                        data={growthRateData}
-                        margin={{ top: 10, right: 30, left: 10, bottom: 30 }}
-                      >
-                        <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                        <ReferenceLine y={0} stroke="#666" strokeDasharray="3 3" />
-                        <XAxis 
-                          dataKey="month" 
-                          minTickGap={30}
-                        />
-                        <YAxis 
-                          tickFormatter={(val) => `${val}%`} 
-                          label={{ value: 'Growth %', angle: -90, position: 'insideLeft' }}
-                        />
-                        <Tooltip 
-                          formatter={(value) => [`${value}%`, 'Growth Rate']}
-                          contentStyle={{
-                            backgroundColor: 'rgba(255,255,255,0.95)',
-                            border: '1px solid #ddd',
-                            borderRadius: '4px',
-                            padding: '8px',
-                            boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
-                            color: '#000'
-                          }}
-                          labelStyle={{ color: '#333' }}
-                          itemStyle={{ color: '#000' }}
-                        />
-                        <Legend verticalAlign="top" height={36} />
-                        <Bar 
-                          dataKey="growth" 
-                          name="Monthly Growth Rate" 
-                          radius={[5, 5, 0, 0]}
-                        >
-                          {growthRateData.map((entry, index) => (
-                            <Cell 
-                              key={`cell-${index}`} 
-                              fill={entry.growth >= 0 ? '#10b981' : '#ef4444'} 
-                            />
-                          ))}
-                          <LabelList dataKey="growth" position="top" formatter={(val: number) => `${val}%`} style={{ fill: '#333', fontSize: 12 }} />
-                        </Bar>
-                      </BarChart>
                     </ResponsiveContainer>
                   </div>
                 </CardContent>

@@ -3,6 +3,7 @@ import { createContext, useContext, useState, useEffect, useRef, FC, ReactNode }
 import type { ArNSRecord } from '../types';
 import { getAllArnsFromDB } from '../services/arnsService';
 import { initializeDB } from '../services/initService';
+import { showRegistrationNotification } from '../services/notificationService';
 
 interface DataContextValue {
   records: ArNSRecord[];
@@ -32,11 +33,9 @@ export const DataProvider: FC<DataProviderProps> = ({ children }: DataProviderPr
       const recs = await getAllArnsFromDB();
       // Notify user if new registrations arrived
       if (prevCountRef.current > 0 && recs.length > prevCountRef.current) {
-        const diff = recs.length - prevCountRef.current;
         if (Notification.permission === 'granted') {
-          new Notification('New ArNS registration', {
-            body: `${diff} new registration${diff > 1 ? 's' : ''} available.`
-          });
+          const newRecords = recs.filter(r => !records.some(p => p.name === r.name && p.startTimestamp === r.startTimestamp));
+          newRecords.forEach(r => showRegistrationNotification(r.name, r.owner || ''));
         }
       }
       setRecords(recs);

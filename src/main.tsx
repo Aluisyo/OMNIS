@@ -8,13 +8,14 @@ import { setupFocusVisible } from './utils/focusVisible';
 
 // Clean expired cache on app startup
 import { cleanExpiredCache } from './services/cacheService';
-import { initializeDB } from './services/initService';
 cleanExpiredCache();
-// Seed IndexedDB from Arweave manifest
-initializeDB().catch(console.error);
-
 // Setup focus-visible for accessibility
 setupFocusVisible();
+
+// Register service worker for notifications
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.register('/sw.js').catch(console.error);
+}
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>

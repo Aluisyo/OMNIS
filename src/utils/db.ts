@@ -51,6 +51,14 @@ export async function saveRecordsSmart(records: any[]) {
         updated.expiresAt = rec.expiresAt;
         shouldUpdate = true;
       }
+      if (rec.primaryName && rec.primaryName !== existing.primaryName) {
+        updated.primaryName = rec.primaryName;
+        shouldUpdate = true;
+      }
+      if (Array.isArray(rec.underNames) && JSON.stringify(rec.underNames) !== JSON.stringify(existing.underNames)) {
+        updated.underNames = rec.underNames;
+        shouldUpdate = true;
+      }
       if (shouldUpdate) {
         await tx.store.put(updated);
       }

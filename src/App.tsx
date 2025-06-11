@@ -11,6 +11,7 @@ const Directory = React.lazy(() => import('./pages/Directory'));
 const Analytics = React.lazy(() => import('./pages/Analytics'));
 const TopHolders = React.lazy(() => import('./pages/TopHolders'));
 const NameDetails = React.lazy(() => import('./pages/NameDetails'));
+const UndernameDetails = React.lazy(() => import('./pages/UndernameDetails'));
 
 // Fallback loader
 const PageLoader = () => (
@@ -55,6 +56,11 @@ function App() {
                 <Route path="name/:name" element={
                   <Suspense fallback={<PageLoader />}>
                     <NameDetails />
+                  </Suspense>
+                } />
+                <Route path="undername/:name" element={
+                  <Suspense fallback={<PageLoader />}>
+                    <UndernameDetails />
                   </Suspense>
                 } />
               </Route>

@@ -9,4 +9,10 @@ export default defineConfig({
   optimizeDeps: {
     exclude: ['lucide-react'],
   },
+  build: {
+    // bundle everything into a single file to avoid dynamic import errors on Arweave
+    rollupOptions: {
+      output: { inlineDynamicImports: true }
+    }
+  },
 });
