@@ -6,17 +6,57 @@
     <link rel="manifest" href="/manifest.json" />
     <meta name="theme-color" content="#3b82f6" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-    <title>OMNIS - Arweave Name System (ArNS) Explorer</title>
-    <meta property="og:title" content="Arweave Name System (ArNS) Explorer" />
-    <meta property="og:description" content="Explore Arweave Name Service registrations, analytics, and top holders with OMNIS ArNS Explorer" />
-    <meta property="og:image" content="/social-image.svg" />
-    <meta name="twitter:card" content="summary_large_image" />
-    <meta name="twitter:title" content="Arweave Name System (ArNS) Explorer" />
-    <meta name="twitter:description" content="Explore Arweave Name Service registrations, analytics, and top holders with OMNIS ArNS Explorer" />
-    <meta name="twitter:image" content="/social-image.svg" />
+    <!-- HTML Meta Tags -->
+    <title>Arweave Name System (ArNS) Explorer</title>
+    <meta name="description" content="Explore Arweave Name Service registrations, analytics, and top holders with OMNIS ArNS Explorer">
+
+    <!-- Facebook Meta Tags -->
+    <meta property="og:url" content="https://omnis.ar.io/">
+    <meta property="og:type" content="website">
+    <meta property="og:title" content="Arweave Name System (ArNS) Explorer">
+    <meta property="og:description" content="Explore Arweave Name Service registrations, analytics, and top holders with OMNIS ArNS Explorer">
+    <meta property="og:image" content="https://omnis.ar.io/social-image.svg">
+
+    <!-- Twitter Meta Tags -->
+    <meta name="twitter:card" content="summary_large_image">
+    <meta property="twitter:domain" content="omnis.ar.io">
+    <meta property="twitter:url" content="https://omnis.ar.io/">
+    <meta name="twitter:title" content="Arweave Name System (ArNS) Explorer">
+    <meta name="twitter:description" content="Explore Arweave Name Service registrations, analytics, and top holders with OMNIS ArNS Explorer">
+    <meta name="twitter:image" content="https://omnis.ar.io/social-image.svg">
+
   </head>
   <body>
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
   </body>
+  <script>
+    (function() {
+      // Configuration
+      const ANALYTICS_CONFIG = {
+        src: 'https://analytics_arlink.ar.io/browser.js',
+        processId: 'KmYZJ3YnPU0UhcdQ57ZBj6anTVMK7Fh_PXvFei7tiOQ',
+        trackUrlHashes: true,
+        debug: false
+      };
+
+      // Wait for DOM to be ready
+      function init() {
+        const script = document.createElement('script');
+        script.type = 'module';
+        script.src = ANALYTICS_CONFIG.src;
+        script.setAttribute('data-process-id', ANALYTICS_CONFIG.processId);
+        script.setAttribute('data-track-url-hashes', ANALYTICS_CONFIG.trackUrlHashes);
+        script.setAttribute('data-debug', ANALYTICS_CONFIG.debug);
+        document.body.appendChild(script);
+      }
+
+      // Handle different loading states
+      if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', init);
+      } else {
+        init();
+      }
+    })();
+  </script>
 </html>
