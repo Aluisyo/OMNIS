@@ -233,7 +233,7 @@ const GlobalSearch: React.FC = () => {
               onFocus={() => setIsFocused(true)}
               onBlur={handleBlur}
               placeholder="Search names, address, tags..."
-              className="h-10 w-full rounded-lg border-0 bg-white/20 backdrop-blur-sm pl-10 pr-10 text-base md:text-sm text-gray-900 placeholder-gray-700 ring-1 ring-white/30 focus:outline-none focus:ring-2 focus:ring-primary-400 dark:bg-dark-200/40 dark:text-white dark:placeholder-gray-400 dark:ring-white/10 dark:focus:ring-accent-blue transition-all duration-200 ease-in-out"
+              className="h-10 w-full rounded-lg border border-gray-200 bg-white/80 backdrop-blur-sm pl-10 pr-10 text-base md:text-sm text-gray-900 placeholder-gray-700 focus:outline-none focus:ring-2 focus:ring-primary-400 dark:bg-dark-200/40 dark:text-white dark:placeholder-gray-400 dark:border-white/10 dark:focus:ring-accent-blue transition-all duration-200 ease-in-out"
             />
             {query && (
               <motion.button

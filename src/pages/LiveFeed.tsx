@@ -371,128 +371,178 @@ const LiveFeed: React.FC = () => {
         )}
       </AnimatePresence>
       
-      {/* Registrations Table */}
-      <motion.div 
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: 0.2, duration: 0.4 }}
-        className="overflow-hidden rounded-xl border border-gray-200/50 dark:border-white/5 bg-white/80 dark:bg-dark-100/40 backdrop-blur-sm shadow-sm mt-6"
-      >
-        <div className="overflow-x-auto">
-          <table className="min-w-full text-sm">
-            <thead>
-              <tr className="bg-gray-50/80 dark:bg-dark-200/50 border-b border-gray-200/50 dark:border-white/5">
-                <th className="px-4 py-3 text-left font-medium text-gray-700 dark:text-dark-500">ArNS</th>
-                <th className="px-4 py-3 text-left font-medium text-gray-700 dark:text-dark-500">Type</th>
-                <th className="px-4 py-3 text-left font-medium text-gray-700 dark:text-dark-500">Owner</th>
-                <th className="px-4 py-3 text-left font-medium text-gray-700 dark:text-dark-500">Registered</th>
-                <th className="px-4 py-3 text-left font-medium text-gray-700 dark:text-dark-500">Expires</th>
-                <th className="px-4 py-3 text-left font-medium text-gray-700 dark:text-dark-500">ANT</th>
-                <th className="px-4 py-3 text-left font-medium text-gray-700 dark:text-dark-500">Purchase Price</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-200/50 dark:divide-white/5">
-              {dataLoading ? (
-                <>
-                  {Array.from({ length: 5 }).map((_, idx) => (
-                    <tr key={idx}>
-                      {Array.from({ length: 7 }).map((_, col) => (
-                        <td key={col} className="px-4 py-3">
-                          <div className="h-4 bg-gray-200 dark:bg-gray-700 rounded animate-pulse w-full" />
-                        </td>
-                      ))}
-                    </tr>
-                  ))}
-                </>
-              ) : registrations.length === 0 ? (
-                <tr>
-                  <td colSpan={7} className="py-10 text-center">
-                    <div className="flex flex-col items-center justify-center space-y-2">
-                      <Search className="h-10 w-10 text-gray-400 dark:text-dark-600" />
-                      <p className="text-gray-500 dark:text-dark-600">No registrations found.</p>
-                    </div>
-                  </td>
+      <div className="hidden md:block">
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.2, duration: 0.4 }}
+          className="overflow-hidden rounded-xl border border-gray-200/50 dark:border-white/5 bg-white/80 dark:bg-dark-100/40 backdrop-blur-sm shadow-sm mt-6"
+        >
+          <div className="overflow-x-auto">
+            <table className="min-w-full text-sm">
+              <thead>
+                <tr className="bg-gray-50/80 dark:bg-dark-200/50 border-b border-gray-200/50 dark:border-white/5">
+                  <th className="px-4 py-3 text-left font-medium text-gray-700 dark:text-dark-500">ArNS</th>
+                  <th className="px-4 py-3 text-left font-medium text-gray-700 dark:text-dark-500">Type</th>
+                  <th className="px-4 py-3 text-left font-medium text-gray-700 dark:text-dark-500">Owner</th>
+                  <th className="px-4 py-3 text-left font-medium text-gray-700 dark:text-dark-500">Registered</th>
+                  <th className="px-4 py-3 text-left font-medium text-gray-700 dark:text-dark-500">Expires</th>
+                  <th className="px-4 py-3 text-left font-medium text-gray-700 dark:text-dark-500">ANT</th>
+                  <th className="px-4 py-3 text-left font-medium text-gray-700 dark:text-dark-500">Purchase Price</th>
                 </tr>
-              ) : (
-                registrations.map((record: ArNSRecord, index: number) => (
-                  <motion.tr 
-                    key={record.id} 
-                    initial={{ opacity: 0, y: 10 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ delay: index * 0.03, duration: 0.2 }}
-                    className="hover:bg-gray-50/80 dark:hover:bg-dark-200/30 transition-colors duration-150"
-                  >
-                    <td className="px-4 py-3">
-                      <span
-                        onClick={() => navigate(`/name/${record.name}`)}
-                        className="font-mono text-primary-600 dark:text-accent-blue cursor-pointer hover:underline font-medium"
-                      >
-                        {decodeName(record.name)}
-                      </span>
+              </thead>
+              <tbody className="divide-y divide-gray-200/50 dark:divide-white/5">
+                {dataLoading ? (
+                  <>
+                    {Array.from({ length: 5 }).map((_, idx) => (
+                      <tr key={idx}>
+                        {Array.from({ length: 7 }).map((_, col) => (
+                          <td key={col} className="px-4 py-3">
+                            <div className="h-4 bg-gray-200 dark:bg-gray-700 rounded animate-pulse w-full" />
+                          </td>
+                        ))}
+                      </tr>
+                    ))}
+                  </>
+                ) : registrations.length === 0 ? (
+                  <tr>
+                    <td colSpan={7} className="py-10 text-center">
+                      <div className="flex flex-col items-center justify-center space-y-2">
+                        <Search className="h-10 w-10 text-gray-400 dark:text-dark-600" />
+                        <p className="text-gray-500 dark:text-dark-600">No registrations found.</p>
+                      </div>
                     </td>
-                    <td className="px-4 py-3">
-                      {record.type === 'lease' ? (
-                        <span className="inline-flex items-center rounded-full bg-primary-50 dark:bg-accent-blue/10 px-2.5 py-0.5 text-xs font-medium text-primary-600 dark:text-accent-blue">
-                          Lease
+                  </tr>
+                ) : (
+                  registrations.map((record: ArNSRecord, index: number) => (
+                    <motion.tr 
+                      key={record.id} 
+                      initial={{ opacity: 0, y: 10 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ delay: index * 0.03, duration: 0.2 }}
+                      className="hover:bg-gray-50/80 dark:hover:bg-dark-200/30 transition-colors duration-150"
+                    >
+                      <td className="px-4 py-3">
+                        <span
+                          onClick={() => navigate(`/name/${record.name}`)}
+                          className="font-mono text-primary-600 dark:text-accent-blue cursor-pointer hover:underline font-medium"
+                        >
+                          {decodeName(record.name)}
                         </span>
-                      ) : record.type === 'permabuy' ? (
-                        <span className="inline-flex items-center rounded-full bg-accent-green/10 px-2.5 py-0.5 text-xs font-medium text-accent-green">
-                          Permabuy
+                      </td>
+                      <td className="px-4 py-3">
+                        {record.type === 'lease' ? (
+                          <span className="inline-flex items-center rounded-full bg-primary-200 px-2.5 py-0.5 text-xs font-semibold text-primary-900 dark:bg-accent-blue/10 dark:text-accent-blue">
+                            Lease
+                          </span>
+                        ) : record.type === 'permabuy' ? (
+                          <span className="inline-flex items-center rounded-full bg-accent-green/50 px-2.5 py-0.5 text-xs font-semibold text-accent-green-800 dark:bg-accent-green/20 dark:text-accent-green">
+                            Permabuy
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center rounded-full bg-gray-100 dark:bg-gray-800 px-2.5 py-0.5 text-xs font-medium text-gray-600 dark:text-gray-300">
+                            {record.type}
+                          </span>
+                        )}
+                      </td>
+                      <td className="truncate px-4 py-3">
+                        <span
+                          className="font-mono text-primary-600 dark:text-accent-blue cursor-pointer hover:underline"
+                          onClick={() => {
+                            const owner = record.owner;
+                            if (!owner) return;
+                            navigate('/directory', { state: { owner } });
+                          }}
+                        >
+                          {formatAddress(record.owner || '')}
                         </span>
-                      ) : (
-                        <span className="inline-flex items-center rounded-full bg-gray-100 dark:bg-gray-800 px-2.5 py-0.5 text-xs font-medium text-gray-600 dark:text-gray-300">
-                          {record.type}
-                        </span>
-                      )}
-                    </td>
-                    <td className="truncate px-4 py-3">
-                      <span
-                        className="font-mono text-primary-600 dark:text-accent-blue cursor-pointer hover:underline"
-                        onClick={() => {
-                          if (record.owner) {
-                            navigate(`/directory?search=${encodeURIComponent(record.owner)}`);
-                          }
-                        }}
-                      >
-                        {formatAddress(record.owner || '')}
-                      </span>
-                    </td>
-                    <td className="px-4 py-3 text-gray-600 dark:text-dark-600">
-                      {record.startTimestamp ? new Date(record.startTimestamp).toLocaleString() : '-'}
-                    </td>
-                    <td className="font-mono px-4 py-3 text-sm text-gray-600 dark:text-gray-400">
-                      {record.type === 'lease' ? (
-                        record.expiresAt ? (
-                          new Date(record.expiresAt).toLocaleString()
-                        ) : (record as any).endTimestamp ? (
-                          new Date((record as any).endTimestamp).toLocaleString()
-                        ) : '-'
-                      ) : record.type === 'permabuy' ? (
-                        <span className="inline-flex items-center rounded-full bg-accent-green/10 px-2.5 py-0.5 text-xs font-medium text-accent-green">
-                          Never
-                        </span>
-                      ) : (
-                        '-'
-                      )}
-                    </td>
-                    <td className="font-mono text-xs text-primary-600 dark:text-accent-blue px-4 py-3">
-                      {(record.processId || record.contractTxId) ? (
-                        <a href={`https://ao.link/#/token/${record.processId || record.contractTxId}`} 
-                           target="_blank" 
-                           rel="noopener noreferrer" 
-                           className="hover:underline hover:text-primary-700 dark:hover:text-accent-blue/80 transition-colors duration-150">
-                          {((record.processId || record.contractTxId) || '').slice(0, 8)}...{((record.processId || record.contractTxId) || '').slice(-6)}
-                        </a>
-                      ) : '-'}
-                    </td>
-                    <td className="px-4 py-3 text-accent-green dark:text-accent-green/90">{formatIO(record.purchasePrice)}</td>
-                  </motion.tr>
-                ))
-              )}
-            </tbody>
-          </table>
-        </div>
-      </motion.div>
+                      </td>
+                      <td className="font-mono px-4 py-3 text-sm text-gray-600 dark:text-gray-400">
+                        {record.startTimestamp ? new Date(record.startTimestamp).toLocaleString() : '-'}
+                      </td>
+                      <td className="font-mono px-4 py-3 text-sm text-gray-600 dark:text-gray-400">
+                        {record.type === 'lease' ? (
+                          record.expiresAt ? (
+                            new Date(record.expiresAt).toLocaleString()
+                          ) : (record as any).endTimestamp ? (
+                            new Date((record as any).endTimestamp).toLocaleString()
+                          ) : '-'
+                        ) : record.type === 'permabuy' ? (
+                          <span className="inline-flex items-center rounded-full bg-accent-green/50 px-2.5 py-0.5 text-xs font-semibold text-accent-green-800 dark:bg-accent-green/20 dark:text-accent-green">
+                            Never
+                          </span>
+                        ) : (
+                          '-'
+                        )}
+                      </td>
+                      <td className="font-mono text-xs text-primary-600 dark:text-accent-blue px-4 py-3">
+                        {(record.processId || record.contractTxId) ? (
+                          <a href={`https://ao.link/#/token/${record.processId || record.contractTxId}`} 
+                             target="_blank" 
+                             rel="noopener noreferrer" 
+                             className="hover:underline hover:text-primary-700 dark:hover:text-accent-blue/80 transition-colors duration-150">
+                            {((record.processId || record.contractTxId) || '').slice(0, 8)}...{((record.processId || record.contractTxId) || '').slice(-6)}
+                          </a>
+                        ) : '-'}
+                      </td>
+                      <td className="px-4 py-3 text-accent-green-800 dark:text-accent-green/90 font-semibold">{formatIO(record.purchasePrice)}</td>
+                    </motion.tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+        </motion.div>
+      </div>
+      {/* Mobile Card View */}
+      <div className="md:hidden space-y-4 mt-6">
+        {registrations.map((record) => (
+          <div
+            key={record.id ?? record.name}
+            onClick={() => navigate(`/name/${record.name}`)}
+            className="p-4 bg-white/80 dark:bg-dark-100/40 backdrop-blur-sm rounded-xl shadow-sm cursor-pointer"
+          >
+            <div className="flex justify-between items-center mb-2">
+              <h4 className="font-medium text-primary-600 dark:text-accent-blue">{decodeName(record.name)}</h4>
+              <span
+                className={`inline-block rounded-full px-2 py-0.5 text-xs font-semibold ${
+                  record.type === 'lease'
+                    ? 'bg-primary-200 text-primary-900'
+                    : record.type === 'permabuy'
+                    ? 'bg-accent-green/50 text-accent-green-800'
+                    : 'bg-gray-200 dark:bg-gray-800 text-gray-700 dark:text-gray-300'
+                }`}
+              >
+                {record.type === 'lease'
+                  ? 'Lease'
+                  : record.type === 'permabuy'
+                  ? 'Permabuy'
+                  : record.type}
+              </span>
+            </div>
+            <div className="text-sm space-y-1 text-gray-700 dark:text-gray-300">
+              <div>
+                <span className="font-semibold">Owner:</span>
+                <span
+                  className="font-mono text-primary-600 dark:text-accent-blue cursor-pointer hover:underline"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    const owner = record.owner;
+                    if (!owner) return;
+                    navigate('/directory', { state: { owner } });
+                  }}
+                >
+                  {formatAddress(record.owner || '')}
+                </span>
+              </div>
+              <div><span className="font-semibold">Registered:</span> {record.startTimestamp ? new Date(record.startTimestamp).toLocaleString() : '-'}</div>
+              <div><span className="font-semibold">Expires:</span> {record.type === 'lease' ? (record.expiresAt ? new Date(record.expiresAt).toLocaleString() : '-') : record.type === 'permabuy' ? 'Never' : '-'}</div>
+              <div><span className="font-semibold">ANT:</span> {(record.contractTxId || record.processId) ? `${(record.processId || record.contractTxId).slice(0,6)}...` : '-'}</div>
+              <div><span className="font-semibold">Price:</span> {formatIO(record.purchasePrice)}</div>
+            </div>
+          </div>
+        ))}
+      </div>
 
       {/* Show More Button */}
       <motion.div 

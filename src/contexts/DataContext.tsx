@@ -22,8 +22,8 @@ export const DataProvider: FC<DataProviderProps> = ({ children }: DataProviderPr
   const [records, setRecords] = useState<ArNSRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  // Ref to track previous record count for notifications
-  const prevCountRef = useRef<number>(0);
+  // Ref to track previous records for notifications
+  const prevRecordsRef = useRef<ArNSRecord[]>([]);
 
   const refresh = async () => {
     setLoading(true);
@@ -31,15 +31,16 @@ export const DataProvider: FC<DataProviderProps> = ({ children }: DataProviderPr
     try {
       await initializeDB();
       const recs = await getAllArnsFromDB();
-      // Notify user if new registrations arrived
-      if (prevCountRef.current > 0 && recs.length > prevCountRef.current) {
-        if (Notification.permission === 'granted') {
-          const newRecords = recs.filter(r => !records.some(p => p.name === r.name && p.startTimestamp === r.startTimestamp));
+      // Notify user for new registrations based on previous records
+      const oldRecs = prevRecordsRef.current;
+      if (oldRecs.length > 0) {
+        const newRecords = recs.filter(r => !oldRecs.some(p => p.name === r.name && p.startTimestamp === r.startTimestamp));
+        if (newRecords.length > 0 && Notification.permission === 'granted') {
           newRecords.forEach(r => showRegistrationNotification(r.name, r.owner || ''));
         }
       }
       setRecords(recs);
-      prevCountRef.current = recs.length;
+      prevRecordsRef.current = recs;
     } catch (e: any) {
       setError(e.message || String(e));
     } finally {

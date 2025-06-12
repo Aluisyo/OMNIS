@@ -272,6 +272,18 @@ const NameDetails: FC = () => {
                     </motion.div>
                     <motion.div variants={detailItemVariants} className="flex items-center justify-between py-3 text-sm group hover:bg-gray-50/50 dark:hover:bg-gray-800/30 rounded-md px-2 -mx-2 transition-all">
                       <span className="text-gray-600 dark:text-gray-400 flex items-center">
+                        <Tag className="h-4 w-4 mr-2 text-blue-500 group-hover:scale-110 transition-transform" />
+                        PrimaryName:
+                      </span>
+                      <span
+                        className="font-mono text-primary-600 dark:text-accent-blue cursor-pointer hover:underline"
+                        onClick={() => navigate('/directory', { state: { owner: record.primaryName } })}
+                      >
+                        {record.primaryName ? decodeName(record.primaryName) : '-'}
+                      </span>
+                    </motion.div>
+                    <motion.div variants={detailItemVariants} className="flex items-center justify-between py-3 text-sm group hover:bg-gray-50/50 dark:hover:bg-gray-800/30 rounded-md px-2 -mx-2 transition-all">
+                      <span className="text-gray-600 dark:text-gray-400 flex items-center">
                         <Clock className="h-4 w-4 mr-2 text-blue-500 group-hover:scale-110 transition-transform" />
                         Lease Duration:
                       </span>
