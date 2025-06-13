@@ -1,102 +1,88 @@
-# OMNIS - ARNS Explorer
+# OMNIS ArNS Explorer — Frontend
 
-A modern web application for exploring the Arweave Name Service (ArNS) ecosystem.
+A modern React + TypeScript single-page application for exploring the Arweave Name Service (ArNS) ecosystem.
 
-## Features
+## 🚀 Features
 
-- **Live Feed**: Real-time updates of new ArNS registrations
-- **Directory**: Searchable and filterable list of all ArNS names
-- **Analytics**: Comprehensive statistics and visualizations
-- **Top Holders**: Track the most active participants in the ecosystem
-- **Name Details**: In-depth information about individual ArNS names
+- **Live Feed**: Real-time stream of new and updated name registrations.
+- **Directory**: Fast search, filter by name, owner, with auto-submit via navigation state.
+- **Analytics**: Charts for top holders and registration trends (Web Worker powered).
+- **Top Holders**: Interactive list and mobile-friendly cards, click primary names to view tied ArNS.
+- **Name Details**: Full metadata, owner of ArNS, undernames, Web preview of ArNS.
 
-## Tech Stack
+## 🛠 Tech Stack
 
-- **Frontend**: React, TypeScript, Tailwind CSS
-- **Data Visualization**: Recharts
-- **Performance**: Web Workers, IndexedDB
-- **Notifications**: Service Worker, Push API
-- **API Integration**: @ar.io/sdk
+- **Framework**: React 18, TypeScript, Vite
+- **Styling**: Tailwind CSS, tailwind-merge, clsx
+- **State & Context**: React Context (DataContext), IndexedDB via idb
+- **Data & Workers**: @ar.io/sdk, arweave, Web Worker (arnsWorker.ts)
+- **Charts & Animations**: Recharts, framer-motion
+- **UI Elements**: lucide-react icons, react-hot-toast
+- **Routing**: react-router-dom v6
 
-## Getting Started
+## 📋 Prerequisites
 
-### Prerequisites
-
-- Node.js 16+
+- Node.js >= 16
 - npm or yarn
 
-### Installation
+## ⚙️ Setup & Development
 
-#### Frontend Installation
+1. Clone repo:
+   ```bash
+   git clone https://github.com/Aluisyo/OMNIS
+   cd OMNIS
+   ```
+2. Install dependencies:
+   ```bash
+   npm install
+   # or yarn
+   ```
+3. Run in dev mode:
+   ```bash
+   npm run dev
+   ```
+4. Open http://localhost:5173 in your browser.
 
-```bash
-# Clone the repository
-git clone https://github.com/Aluisyo/OMNIS
-cd OMNIS
-
-# Install dependencies
-npm install
-
-# Start the frontend development server
-npm run dev
-```
-
-#### Backend Installation
-
-```bash
-# Navigate to the backend directory
-cd backend
-
-# Install dependencies
-npm install
-
-# Start the backend development server
-npm run dev
-```
-
-### Building for Production
-
-#### Frontend Build
+## 📦 Build & Preview
 
 ```bash
-# Navigate to the root directory
-cd OMNIS
-
-# Build the frontend for production
-npm run build
+npm run build    # production bundle
+npm run preview  # serve built files
 ```
 
-#### Backend Build
+## 📁 Project Structure
 
-```bash
-# Navigate to the backend directory
-cd backend
-
-# Install dependencies if not installed
-npm install
-
-# Build the backend for production
-npm run build
-
-# Start the backend server
-npm start
+```
+OMNIS/
+├── src/
+│   ├── pages/               # Top-level routes (LiveFeed, Directory, TopHolders, NameDetails, Analytics)
+│   ├── components/          # Shared UI components (common, layout, directory)
+│   ├── contexts/            # DataContext for global records state
+│   ├── services/            # IndexedDB & SDK services (arnsService, dataService)
+│   ├── utils/               # Helpers: punycode, formatters, cn
+│   ├── arnsWorker.ts        # Web Worker entry for heavy analytics
+│   └── index.css, main.tsx  # Tailwind import & app bootstrap
+├── public/                  # Static assets
+├── backend/                 # Separate backend service (see backend/README.md)
+├── vite.config.ts
+└── README.md                # Frontend documentation
 ```
 
-## Architecture
+## ✅ Testing & Linting
 
-The application follows a component-based architecture with:
+- **Lint**: `npm run lint`
+- **Format**: `npm run format`
+- **Test**: `npm run test`
 
-- **Pages**: Main views of the application
-- **Components**: Reusable UI elements
-- **Services**: API and data management
-- **Contexts**: Global state management
-- **Utils**: Helper functions
-- **Workers**: Background processing
+## 🤝 Contributing
 
-## Contributing
+1. Fork and branch from `main`
+2. Commit with clear messages
+3. Open a PR with description of changes and screenshots if UI changed
 
-Contributions are welcome! Please feel free to submit a Pull Request.
+---
 
-## License
 
-This project is licensed under the MIT License - see the LICENSE file for details. 
+## 📄 License
+
+This project is licensed under the MIT License. See the [LICENSE](LICENSE) file for details.

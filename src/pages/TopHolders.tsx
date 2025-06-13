@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { Award, RefreshCw } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle, CardFooter } from '../components/common/Card';
 import Button from '../components/common/Button';
@@ -10,7 +10,9 @@ import { motion } from 'framer-motion';
 import { cn } from '../utils/cn';
 import PageLoading from '../components/common/PageLoading';
 import ErrorMessage from '../components/common/ErrorMessage';
-
+import { useNavigate, Link } from 'react-router-dom';
+import { ResponsiveContainer, BarChart, CartesianGrid, XAxis, YAxis, Tooltip, Legend, Bar } from 'recharts';
+import { decodeName } from '../utils/punycode';
 // Add a formatter for IO (assuming 1 IO = 10^12 Winston)
 function formatIO(winston: string | number | undefined) {
   if (!winston) return '-';
@@ -22,9 +24,6 @@ function formatIO(winston: string | number | undefined) {
   }
   return io.toLocaleString(undefined, { minimumFractionDigits: 8, maximumFractionDigits: 8 }) + ' ARIO';
 }
-
-import { useNavigate } from 'react-router-dom';
-import { ResponsiveContainer, BarChart, CartesianGrid, XAxis, YAxis, Tooltip, Legend, Bar } from 'recharts';
 
 const TopHolders: React.FC = () => {
   const navigate = useNavigate();
@@ -40,6 +39,30 @@ const TopHolders: React.FC = () => {
   const displayedHolders = limit === 'big'
     ? [...holders].sort((a, b) => b.value - a.value).slice(0, BIG_BUYER_COUNT)
     : holders.slice(0, limit as number);
+
+  const primaryNamesMap = useMemo(() => {
+    const map: Record<string, string> = {};
+    records.forEach(rec => {
+      if (rec.owner && rec.primaryName) {
+        map[rec.owner] = rec.primaryName;
+      }
+    });
+    return map;
+  }, [records]);
+
+  const [modalOpen, setModalOpen] = useState(false);
+  const [selectedPrimaryName, setSelectedPrimaryName] = useState<string>('');
+
+  // Modal items: ARNS tied to the selected primary name or fallback to owner’s ARNS
+  const modalItems = useMemo(() => {
+    if (!selectedPrimaryName) return [];
+    const primaryMatches = records.filter(rec => rec.primaryName === selectedPrimaryName);
+    if (primaryMatches.length > 0) {
+      return primaryMatches;
+    }
+    // Fallback: list ARNS owned by this address
+    return records.filter(rec => rec.owner === selectedPrimaryName);
+  }, [records, selectedPrimaryName]);
 
   useEffect(() => {
     let unsubProgress: (() => void);
@@ -159,62 +182,105 @@ const TopHolders: React.FC = () => {
                 <p className="text-gray-500 dark:text-gray-400">No holders data available</p>
               </div>
             ) : (
-              <div className="overflow-x-auto">
-                <table className="w-full border-collapse">
-                  <thead>
-                    <tr className="border-b border-gray-200 dark:border-gray-800">
-                      <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 dark:text-gray-400 uppercase tracking-wider">
-                        Rank
-                      </th>
-                      <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 dark:text-gray-400 uppercase tracking-wider">
-                        Address
-                      </th>
-                      <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 dark:text-gray-400 uppercase tracking-wider">
-                        Names
-                      </th>
-                      <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 dark:text-gray-400 uppercase tracking-wider">
-                        Value
-                      </th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {displayedHolders.map((holder, idx) => (
-                      <motion.tr 
-                        key={holder.address} 
-                        className={`${idx !== displayedHolders.length - 1 ? 'border-b border-gray-100 dark:border-gray-800' : ''} hover:bg-gray-50 dark:hover:bg-gray-800/30`}
-                        initial={{ opacity: 0, y: 10 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        transition={{ delay: idx * 0.05, duration: 0.2 }}
-                      >
-                        <td className="px-4 py-4 whitespace-nowrap">
-                          <div className="flex items-center">
-                            <div className="h-8 w-8 rounded-full bg-indigo-100 dark:bg-indigo-900/30 flex items-center justify-center mr-2">
-                              <Award className="h-4 w-4 text-indigo-600 dark:text-indigo-400" />
+              <>
+                <div className="hidden md:block overflow-x-auto">
+                  <table className="w-full border-collapse">
+                    <thead>
+                      <tr className="border-b border-gray-200 dark:border-gray-800">
+                        <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 dark:text-gray-400 uppercase tracking-wider">
+                          Rank
+                        </th>
+                        <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 dark:text-gray-400 uppercase tracking-wider">
+                          Primary Name
+                        </th>
+                        <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 dark:text-gray-400 uppercase tracking-wider">
+                          Address
+                        </th>
+                        <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 dark:text-gray-400 uppercase tracking-wider">
+                          Names
+                        </th>
+                        <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 dark:text-gray-400 uppercase tracking-wider">
+                          Value
+                        </th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {displayedHolders.map((holder, idx) => (
+                        <motion.tr 
+                          key={holder.address} 
+                          className={`${idx !== displayedHolders.length - 1 ? 'border-b border-gray-100 dark:border-gray-800' : ''} hover:bg-gray-50 dark:hover:bg-gray-800/30`}
+                          initial={{ opacity: 0, y: 10 }}
+                          animate={{ opacity: 1, y: 0 }}
+                          transition={{ delay: idx * 0.05, duration: 0.2 }}
+                        >
+                          <td className="px-4 py-4 whitespace-nowrap">
+                            <div className="flex items-center">
+                              <div className="h-8 w-8 rounded-full bg-indigo-100 dark:bg-indigo-900/30 flex items-center justify-center mr-2">
+                                <Award className="h-4 w-4 text-indigo-600 dark:text-indigo-400" />
+                              </div>
+                              <span className="font-semibold text-gray-900 dark:text-white">#{idx + 1}</span>
                             </div>
-                            <span className="font-semibold text-gray-900 dark:text-white">#{idx + 1}</span>
-                          </div>
-                        </td>
-                        <td className="px-4 py-4 whitespace-nowrap">
-                          <div className="text-sm text-gray-900 dark:text-gray-100 font-mono">
-                            <button 
-                              className="hover:text-blue-600 dark:hover:text-blue-400 transition-colors"
-                              onClick={() => navigate(`/directory?search=${holder.address}`, { state: { owner: holder.address } })}
+                          </td>
+                          <td className="px-4 py-4 whitespace-nowrap">
+                            <button
+                              className="text-blue-600 dark:text-accent-lavender hover:underline text-sm"
+                              onClick={() => {
+                                const key = primaryNamesMap[holder.address] ?? holder.address;
+                                setSelectedPrimaryName(key);
+                                setModalOpen(true);
+                              }}
                             >
-                              {formatAddress(holder.address)}
+                              {primaryNamesMap[holder.address] ?? '-'}
                             </button>
-                          </div>
-                        </td>
-                        <td className="px-4 py-4 whitespace-nowrap">
-                          <div className="text-sm text-gray-900 dark:text-gray-100">{formatNumber(holder.count)}</div>
-                        </td>
-                        <td className="px-4 py-4 whitespace-nowrap">
-                          <div className="text-sm text-gray-900 dark:text-gray-100">{formatIO(holder.value)}</div>
-                        </td>
-                      </motion.tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
+                          </td>
+                          <td className="px-4 py-4 whitespace-nowrap">
+                            <div className="text-sm text-gray-900 dark:text-gray-100 font-mono">
+                              <button 
+                                className="hover:text-blue-600 dark:hover:text-blue-400 transition-colors"
+                                onClick={() => navigate(`/directory?search=${holder.address}`, { state: { owner: holder.address } })}
+                              >
+                                {formatAddress(holder.address)}
+                              </button>
+                            </div>
+                          </td>
+                          <td className="px-4 py-4 whitespace-nowrap">
+                            <div className="text-sm text-gray-900 dark:text-gray-100">{formatNumber(holder.count)}</div>
+                          </td>
+                          <td className="px-4 py-4 whitespace-nowrap">
+                            <div className="text-sm text-gray-900 dark:text-gray-100">{formatIO(holder.value)}</div>
+                          </td>
+                        </motion.tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+                <div className="md:hidden space-y-4 mt-4">
+                  {displayedHolders.map((holder, idx) => (
+                    <div key={holder.address} className="bg-white dark:bg-dark-100/40 backdrop-blur-sm border border-gray-200/50 dark:border-white/5 rounded-lg p-4 space-y-2">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center space-x-2">
+                          <Award className="h-5 w-5 text-indigo-600 dark:text-indigo-400" />
+                          <span className="font-semibold">#{idx + 1}</span>
+                        </div>
+                        <button className="text-blue-600 dark:text-accent-lavender hover:underline text-sm" onClick={() => {
+                          const key = primaryNamesMap[holder.address] ?? holder.address;
+                          setSelectedPrimaryName(key);
+                          setModalOpen(true);
+                        }}>
+                          {primaryNamesMap[holder.address] ?? '-'}
+                        </button>
+                      </div>
+                      <div>
+                        <button className="font-mono text-gray-900 dark:text-white hover:text-blue-600 dark:hover:text-blue-400" onClick={() => navigate(`/directory?search=${holder.address}`, { state: { owner: holder.address } })}>
+                          {formatAddress(holder.address)}
+                        </button>
+                      </div>
+                      <div className="text-sm text-gray-900 dark:text-gray-100">Names: {formatNumber(holder.count)}</div>
+                      <div className="text-sm text-gray-900 dark:text-gray-100">Value: {formatIO(holder.value)}</div>
+                    </div>
+                  ))}
+                </div>
+              </>
             )}
             
             {/* Holders Distribution Chart */}
@@ -267,6 +333,31 @@ const TopHolders: React.FC = () => {
           </CardFooter>
         </Card>
       </motion.div>
+      {modalOpen && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50" onClick={() => setModalOpen(false)}>
+          <div className="bg-white/90 dark:bg-gray-900/90 backdrop-blur-md rounded-lg shadow-2xl max-w-lg w-full max-h-[70vh] overflow-y-auto p-6 relative border border-gray-200/50 dark:border-gray-800/50" onClick={e => e.stopPropagation()}>
+            <button className="absolute top-2 right-2 text-gray-500 hover:text-gray-800 dark:hover:text-gray-200 h-8 w-8 flex items-center justify-center rounded-full hover:bg-gray-100 dark:hover:bg-gray-800 transition-all" onClick={() => setModalOpen(false)}>
+              ×
+            </button>
+            <h2 className="text-lg font-semibold mb-4 bg-clip-text bg-gradient-to-r from-blue-600 to-purple-600 text-transparent">
+              ArNS for {decodeName(selectedPrimaryName)}
+            </h2>
+            {modalItems.length > 0 ? (
+              <ul className="space-y-2 divide-y divide-gray-100 dark:divide-gray-800">
+                {modalItems.map((item, idx) => (
+                  <motion.li key={idx} className="py-2 hover:bg-gray-50/50 dark:hover:bg-gray-800/30 rounded transition-all px-2" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: idx * 0.05 }}>
+                    <Link to={`/name/${item.name}`} className="font-mono text-blue-600 dark:text-accent-lavender hover:underline text-sm" onClick={() => setModalOpen(false)}>
+                      {decodeName(item.name)}
+                    </Link>
+                  </motion.li>
+                ))}
+              </ul>
+            ) : (
+              <div className="text-gray-600 dark:text-gray-400 p-4 text-center">No ARNS found for {decodeName(selectedPrimaryName)}.</div>
+            )}
+          </div>
+        </div>
+      )}
     </motion.div>
   );
 };

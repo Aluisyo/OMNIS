@@ -1,193 +1,180 @@
-# ArNS Explorer Documentation
+# OMNIS ArNS Explorer — Project Documentation
 
-## Table of Contents
-1. [Introduction](#introduction)
-2. [Technology Stack](#technology-stack)
-3. [Project Structure](#project-structure)
-4. [Installation & Setup](#installation--setup)
-5. [Development Workflow](#development-workflow)
-6. [Core Features](#core-features)
-   - [Directory Page](#directory-page)
-   - [LiveFeed Page](#livefeed-page)
-   - [Name Details Timeline](#name-details-timeline)
-   - [Analytics Page](#analytics-page)
-   - [Global Activity Indicator](#global-activity-indicator)
-   - [CSV Export Utility](#csv-export-utility)
-7. [Architecture & Data Flow](#architecture--data-flow)
-   - [Web Worker (`arnsWorker.ts`)](#web-worker-arnsworkerts)
-   - [Worker Client (`arnsWorkerClient.ts`)](#worker-client-arnsworkerclientts)
-8. [Styling & UI](#styling--ui)
-   - [Tailwind CSS Configuration](#tailwind-css-configuration)
-   - [Component UI Patterns](#component-ui-patterns)
-9. [Error Handling & Accessibility](#error-handling--accessibility)
-10. [Testing & Debugging](#testing--debugging)
-11. [Deployment](#deployment)
-12. [Contributing](#contributing)
-13. [License](#license)
+This repository contains two main parts:
+
+- **Frontend**: A React + TypeScript single-page application built with Vite for exploring Arweave Name Service (ArNS) data.
+- **Backend**: A Node.js cron service that fetches, resolves, and aggregates ArNS records, then uploads consolidated data to Arweave.
 
 ---
 
-## Introduction
-ArNS Explorer is a React+TypeScript web application for browsing, filtering, and resolving ArNS name records. It showcases a directory of records, a live feed, and analytics, while offloading intensive tasks to a Web Worker and persisting data via IndexedDB.
+## 🏛 Architecture
 
-## Technology Stack
-- React with TypeScript
-- Tailwind CSS for utility-first styling
-- Framer Motion for smooth animations
-- react-hot-toast for toast notifications
-- IndexedDB (via idb) for local data storage
-- Web Worker (`arnsWorker.ts`) for heavy computations
-- @ar.io/sdk for ArNS name resolution
+1. **Backend Service** (`/backend`)
+   - Periodically fetches new ArNS registration transactions from Arweave.
+   - Resolves metadata (owner addresses, primary names, undernames).
+   - Persists data locally in `data.json` and uploads via ArDrive/Turbo.
+   - Written in TypeScript, scheduled with cron.
 
-## Project Structure
-```
-project/
-├── backend/                   # Node.js cron backend (fetch & upload jobs)
-├── docs/                     # Project documentation
-├── src/                      # Frontend source code
-│   ├── components/          # UI components
-│   ├── contexts/            # React contexts
-│   ├── hooks/               # Custom hooks
-│   ├── pages/               # Route pages (Directory, LiveFeed, etc.)
-│   ├── services/            # Data services & worker client
-│   ├── utils/               # Helper functions
-│   └── arnsWorker.ts        # Web Worker entry point
-├── public/                  # Static assets
-├── docs/                    # Project documentation
-├── tailwind.config.js       # Tailwind CSS config
-├── package.json             # Frontend scripts & dependencies
-├── tsconfig.json            # Frontend TypeScript config
-└── vite.config.ts           # Vite configuration
-```
+2. **Frontend App** (`/src`)
+   - Single-page React app (React 18 + TypeScript).
+   - Uses IndexedDB (via `idb`) to store and serve fetched records.
+   - Features live feed, search directory, analytics charts, top holders, and name details.
 
-## Installation & Setup
+---
 
-#### Prerequisites
+## 🛠 Tech Stack
 
-- Node.js 16+ and npm (or yarn)
+- **Frontend**: React 18, TypeScript, Vite, Tailwind CSS, framer-motion, Recharts, react-router-dom.
+- **Backend**: Node.js, TypeScript, cron, Axios (Arweave SDK), Docker (optional).
+- **Data Storage**: IndexedDB (frontend), local `data.json` (backend).
+- **Utilities**: punycode decoding, number & address formatters.
 
-#### Clone repository
+---
+
+## 📋 Prerequisites
+
+- **Node.js** v16+ (both frontend & backend)
+- **npm** or **yarn**
+- **Docker & Docker Compose** (optional for backend containerization)
+- **Arweave JWK keyfile** for backend uploads
+
+---
+
+## ⚙️ Setup & Development
+
+### 1. Clone Repository
 ```bash
 git clone https://github.com/Aluisyo/OMNIS
 cd OMNIS
 ```
 
-#### Frontend Setup
-```bash
-# Install dependencies
-npm install
-# Start development server
-npm run dev
-```
+### 2. Install Dependencies
 
-#### Backend Setup
+- **Frontend**
+  ```bash
+  npm install
+  # or yarn
+  ```
+
+- **Backend**
+  ```bash
+  cd backend
+  npm ci
+  ```
+
+### 3. Configuration
+
+- **Frontend**
+  - No special env variables required. Data is loaded from local IndexedDB.
+
+- **Backend**
+  - Copy `.env.example` to `.env` and update:
+    ```ini
+    KEYFILE_PATH=./arweave-keyfile.json   # Path to your Arweave JWK
+    BASE_NAME=<your-base-name>            # ArNS root record name
+    UNDERNAME=<your-undernames-label>     # Label for undernames
+    CRON_SCHEDULE=*/5 * * * *             # Job frequency
+    OWNER_RESOLUTION_CONCURRENCY=10       # Parallel owner lookups
+    METADATA_SAVE_BATCH_SIZE=20           # Batch size for local saves
+    ```
+
+### 4. Running Locally
+
+- **Frontend** (in project root):
+  ```bash
+  npm run dev
+  ```
+  Open [http://localhost:5173](http://localhost:5173).
+
+- **Backend** (in `/backend`):
+  ```bash
+  npm run dev
+  ```
+  Service runs immediately and then on defined cron schedule.
+
+---
+
+## 📦 Build & Production
+
+- **Frontend**
+  ```bash
+  npm run build
+  npm run preview
+  ```
+
+- **Backend**
+  ```bash
+  cd backend
+  npm run build
+  npm start
+  ```
+
+---
+
+## 🐳 Docker & Docker Compose (Backend)
+
 ```bash
-# Navigate to backend directory
 cd backend
-# Install dependencies
-npm install
-# Start backend (build + run with cron jobs)
-npm run dev
+docker-compose up --build -d
 ```
 
-## Development Workflow
-- Organize code by feature: pages, components, services.
-- Run `npm run lint` for linting.
-- Add unit tests when implementing new features.
-- Ensure ARIA labels and keyboard support for accessibility.
-
-## Core Features
-
-### Directory Page
-- Paginated table of ArNS records with filtering and sorting.
-- CSV export for current page, specified pages, or all records using a Web Worker.
-- High-contrast modal UI with light/dark support.
-
-### LiveFeed Page
-- Glass-morphism styled stats cards and registrations table with backdrop blur.
-- Staggered animations for stats cards, table rows, and “Show More” button transitions.
-- Loading skeletons (pulse) for initial DB load and delta fetches, with error banners that reset on retry.
-- Accurate `Expires` display: proper dates for leases and “Never” badges for permabuys.
-- Manual pagination via stylish “Show More” button with gradient and disabled state.
-- Notification toggles and auto-refresh controls with toast feedback.
-
-### Name Details Timeline
-- Interactive timeline view for the Name Details page.
-- Glass-morphism cards with backdrop blur and animated entry.
-- Pulsing and glow effects for scheduled future events via Framer Motion.
-- Staggered appearance and hover interactions for events.
-- Responsive layout with custom date formatting and accessible tooltips.
-
-### Analytics Page
-- Offloads analytics computations to the Web Worker.
-- Displays charts and summary statistics.
-
-### Global Activity Indicator
-- Floating activity status dot at bottom-right, indicating app data loading or refresh operations.
-- Color: amber (`#F59E0B`) pulsing while loading or refreshing.
-- Visible only during loading or refresh operations.
-- Tooltip shows “Loading ARNS data...” or “Refreshing ARNS data...” based on context.
-- Accessible via `aria-label` and `title`.
-
-### CSV Export Utility
-- Dropdown for export options and page range input.
-- Displays progress feedback and triggers CSV download.
-
-## Architecture & Data Flow
-
-### Web Worker (`arnsWorker.ts`)
-- Functions: `resolveOwnersBatch`, `filterRecords`, `sortAndPaginate`, `calculateAnalyticsStatsInWorker`, `calculateTopHoldersInWorker`.
-- Rate-limited API calls with `safeApiCall` and `throttleAll`.
-- Posts messages: `RESOLUTION_PROGRESS` (includes name), `RESOLUTION_ERROR`, and result types.
-
-### Worker Client (`arnsWorkerClient.ts`)
-- Singleton loader via `getArnsWorker()`.
-- Exposed methods: resolve and analytics functions with callbacks.
-- Event subscriptions: `onResolutionProgress(cb)`, `onResolutionError(cb)`.
-
-## Styling & UI
-
-### Tailwind CSS Configuration
-- Dark mode via `class` strategy.
-- Custom colors, blur effects, and glass-morphism.
-- Responsive breakpoints (`sm`, `md`, `lg`).
-
-### Component UI Patterns
-- Utility classes for layout, spacing, and state variants.
-- Reusable patterns with `@apply` when needed.
-
-## Error Handling & Accessibility
-- ARIA labels, roles, and native tooltips.
-- Toast notifications for success/errors.
-- Linting and TypeScript for early error detection.
-
-## Testing & Debugging
-- Use browser dev tools to inspect Web Worker messages.
-- Console logs in Worker for progress and rate-limit delays.
-- Lint via `npm run lint`.
-
-## Deployment
-
-#### Frontend
+Or manually:
 ```bash
-cd OMNIS
-npm run build
+docker build -t omnis-backend .
+docker run -d --env-file .env -v $(pwd)/data.json:/app/data.json omnis-backend
 ```
-- Deploy contents of `dist/` to any static host (Arweave, Netlify, Vercel, S3, etc.)
 
-#### Backend
-```bash
-cd OMNIS/backend
-npm install    # if not already installed
-npm run build  # compile TypeScript
-npm start      # runs `dist/index.js` and schedules cron jobs
+---
+
+## 📁 Project Structure
+
 ```
-- Cron schedule is configured in `backend/src/config.ts` (`CRON_SCHEDULE`). Run as a long-lived process (e.g., via pm2, systemd, or Docker).
+OMNIS/
+├── public/                  # Static assets (incl. social-image.svg/png)
+├── src/                     # Frontend app (React + TS)
+│   ├── pages/               # Routes (LiveFeed, Directory, TopHolders, NameDetails, Analytics)
+│   ├── components/          # Shared UI components
+│   ├── contexts/            # DataContext for IndexedDB
+│   ├── services/            # IDB & SDK data services
+│   ├── utils/               # Helpers (formatters, punycode, cn)
+│   └── arnsWorker.ts        # Web Worker for analytics
+│   └── main.tsx, index.css  # Bootstrap
+├── backend/                 # Node.js ETL service
+│   ├── src/
+│   │  ├── index.ts         # Cron scheduler & job runner
+│   │  ├── config.ts        # App settings
+│   │  ├── jobs/            # fetchAndUpload job
+│   │  └── services/        # ArNS fetch/resolution logic
+│   ├── .env.example        # Sample env variables
+│   ├── data.json           # Local data dump (auto-generated)
+│   └── Dockerfile, docker-compose.yml
+├── LICENSE                  # MIT License
+└── README.md                # Frontend documentation
+└── PROJECT_DOCUMENTATION.md # Combined project docs
+```
 
-## Contributing
-1. Fork the repo and create a feature branch.
-2. Adhere to code style and add tests.
-3. Submit a PR for review.
+---
 
-## License
-MIT 
+## ✅ Testing & Linting
+
+- **Frontend**
+  - `npm run lint`
+  - `npm run format`
+  - `npm run test`
+
+- **Backend**
+  - No formal tests; lint via `npm run lint` (if configured).
+
+---
+
+## 🤝 Contributing
+
+1. Fork the repo and branch from `main`.
+2. Make changes with descriptive commit messages.
+3. Submit a PR with summary and screenshots (if UI updates).
+
+---
+
+## 📄 License
+
+This project is licensed under the MIT License. See [LICENSE](LICENSE).
