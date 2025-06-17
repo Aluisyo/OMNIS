@@ -341,7 +341,7 @@ const NameDetails: FC = () => {
         </motion.div>
       </motion.div>
       {showUndernamesModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50" onClick={() => setShowUndernamesModal(false)}>
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-start justify-center pt-8 z-50" onClick={() => setShowUndernamesModal(false)}>
           <div className="bg-white/90 dark:bg-gray-900/90 backdrop-blur-md rounded-lg shadow-2xl max-w-lg w-full max-h-[70vh] overflow-y-auto p-6 relative border border-gray-200/50 dark:border-gray-800/50" onClick={e => e.stopPropagation()}>
             <button className="absolute top-2 right-2 text-gray-500 hover:text-gray-800 dark:hover:text-gray-200 h-8 w-8 flex items-center justify-center rounded-full hover:bg-gray-100 dark:hover:bg-gray-800 transition-all" onClick={() => setShowUndernamesModal(false)}>
               ×
@@ -365,6 +365,7 @@ const NameDetails: FC = () => {
                   >
                     <Link
                       to={`/undername/${u.name}`}
+                      state={{ parentName: record.name }}
                       className="font-mono text-blue-700 dark:text-blue-300 hover:underline flex items-center"
                       onClick={() => setShowUndernamesModal(false)}
                     >
@@ -380,7 +381,7 @@ const NameDetails: FC = () => {
       )}
       {showOwnerModal && (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm"
+          className="fixed inset-0 z-50 flex items-start justify-center pt-8 bg-black/40 backdrop-blur-sm"
           onClick={() => setShowOwnerModal(false)}
         >
           <motion.div

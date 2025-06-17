@@ -1,5 +1,5 @@
 import { FC } from 'react';
-import { useParams, Link, useNavigate } from 'react-router-dom';
+import { useParams, Link, useNavigate, useLocation } from 'react-router-dom';
 import { ArrowLeft, Hash, Globe, User } from 'lucide-react';
 import { motion } from 'framer-motion';
 import Button from '../components/common/Button';
@@ -10,14 +10,18 @@ import { Card, CardContent, CardHeader, CardTitle } from '../components/common/C
 
 const UndernameDetails: FC = () => {
   const { name } = useParams<{ name: string }>();
+  const location = useLocation();
+  const parentNameFromState = (location.state as { parentName?: string } | undefined)?.parentName;
   const navigate = useNavigate();
   const { records, loading, error } = useData();
 
-  if (loading) return <PageLoading />;
+  if (loading && records.length === 0) return <PageLoading />;
   if (error) return <ErrorMessage message={error} />;
 
   // Find parent record containing this undername
-  const parent = records.find(r => Array.isArray(r.underNames) && r.underNames.some(u => u.name === name));
+  const parent = parentNameFromState
+    ? records.find(r => r.name === parentNameFromState)
+    : records.find(r => Array.isArray(r.underNames) && r.underNames.some(u => u.name === name));
   if (!parent) return <ErrorMessage message={`No parent ARNS found for undername ${name}`} />;
 
   // Animation variants

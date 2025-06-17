@@ -1,5 +1,6 @@
 import React, { ReactNode, useEffect } from 'react';
 import { X } from 'lucide-react';
+import Portal from '../common/Portal';
 
 interface ModalProps {
   isOpen: boolean;
@@ -36,12 +37,7 @@ export const Modal: React.FC<ModalProps> = ({
             className="absolute top-3 right-3 p-2 rounded-full hover:bg-gray-100 dark:hover:bg-gray-800"
             aria-label="Close modal"
           >
-            <X className="h-5 w-5" />
-          </button>
-        )}
-        {title && <h2 className="text-lg font-bold mb-4">{title}</h2>}
-        <div>{children}</div>
       </div>
-    </div>
+    </Portal>
   );
-}; 
+};

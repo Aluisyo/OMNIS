@@ -53,10 +53,14 @@ export const DataProvider: FC<DataProviderProps> = ({ children }: DataProviderPr
     if ('Notification' in window) {
       Notification.requestPermission();
     }
-    // Initial load and then periodic refresh every 5 minutes
+    // Initial load, periodic refresh every 5 minutes, and refresh on window focus
+    window.addEventListener('focus', refresh);
     refresh();
     const intervalId = setInterval(refresh, 5 * 60 * 1000);
-    return () => clearInterval(intervalId);
+    return () => {
+      window.removeEventListener('focus', refresh);
+      clearInterval(intervalId);
+    };
   }, []);
 
   return (

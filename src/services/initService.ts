@@ -1,6 +1,7 @@
 // src/services/initService.ts
 import { clearRecords, saveRecords, saveRecordsSmart } from '../utils/db';
 import { ARNS_GATEWAY_URL } from '../config';
+import { fetchViaWayfinder } from './wayfinderService';
 
 /**
  * Initialize IndexedDB by fetching delta updates from Arweave manifest.
@@ -8,12 +9,9 @@ import { ARNS_GATEWAY_URL } from '../config';
  */
 export async function initializeDB(): Promise<void> {
   console.log('📥 Initializing IndexedDB from Arweave manifest (delta fetch)...');
-  // Fetch manifest
-  const manifestRes = await fetch(ARNS_GATEWAY_URL);
-  if (!manifestRes.ok) {
-    throw new Error(`Failed to fetch manifest: ${manifestRes.status}`);
-  }
-  const manifestJson: any = await manifestRes.json();
+
+  // Fetch manifest via Wayfinder
+  const manifestJson: any = await fetchViaWayfinder<any>(ARNS_GATEWAY_URL);
   const pathsMap: Record<string, { id: string }> = manifestJson.paths ?? manifestJson.manifest?.paths;
   if (!pathsMap) {
     throw new Error('Manifest missing "paths"');
@@ -40,15 +38,14 @@ export async function initializeDB(): Promise<void> {
     const chunkResults = await Promise.all(
       newPaths.map(async fname => {
         const id = pathsMap[fname].id;
-        const url = `https://arweave.net/${id}`;
-        const res = await fetch(url);
-        if (!res.ok) {
-          console.warn(`Failed to fetch chunk ${fname}: ${res.status}`);
+                try {
+          const json = await fetchViaWayfinder<{ records: any[] }>(`ar://${id}`);
+          console.log(`Loaded ${json.records.length} from ${fname}`);
+          return json.records;
+        } catch (error) {
+          console.warn(`Failed to fetch chunk ${fname} id=${id}:`, error);
           return [] as any[];
         }
-        const json = (await res.json()) as { records: any[] };
-        console.log(`Loaded ${json.records.length} from ${fname}`);
-        return json.records;
       })
     );
     const rawRecords = chunkResults.flat();

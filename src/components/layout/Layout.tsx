@@ -34,7 +34,7 @@ const Layout: React.FC = () => {
       
       <Header />
       
-      <main className="flex-1 container mx-auto px-4 sm:px-6 py-8 relative z-10 animate-slide-in mt-16">
+      <main id="main-content" className="flex-1 container mx-auto px-4 sm:px-6 py-8 relative z-10 mt-16">
         <div className="rounded-xl bg-white/70 dark:bg-dark-100/40 backdrop-blur-sm shadow-glass p-4 sm:p-6 border border-white/20 dark:border-white/5">
           <Outlet />
         </div>
