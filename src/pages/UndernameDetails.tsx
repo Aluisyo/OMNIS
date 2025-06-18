@@ -4,7 +4,7 @@ import { ArrowLeft, Hash, Globe, User } from 'lucide-react';
 import { motion } from 'framer-motion';
 import Button from '../components/common/Button';
 import { useData } from '../contexts/DataContext';
-import { wayfinder, fetchHtmlWithFallback } from '../services/wayfinderService';
+import { fetchHtmlWithFallback } from '../services/wayfinderService';
 import PageLoading from '../components/common/PageLoading';
 import ErrorMessage from '../components/common/ErrorMessage';
 import { Card, CardContent, CardHeader, CardTitle } from '../components/common/Card';

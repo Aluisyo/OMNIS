@@ -12,7 +12,7 @@ import { useData } from '../contexts/DataContext';
 import PageLoading from '../components/common/PageLoading';
 import ErrorMessage from '../components/common/ErrorMessage';
 import { ArNSRecord } from '../types';
-import { wayfinder, fetchHtmlWithFallback } from '../services/wayfinderService';
+import { fetchHtmlWithFallback } from '../services/wayfinderService';
 
 const NameDetails: FC = () => {
   const { name } = useParams<{ name: string }>();
@@ -24,9 +24,18 @@ const NameDetails: FC = () => {
   const { records, loading, error } = useData();
   const record = records.find(r => r.name === name) || null;
 
+  // Clear modal states when navigating to a new record
+  useEffect(() => {
+    setShowOwnerModal(false);
+    setOwnerArns([]);
+    setShowUndernamesModal(false);
+  }, [name]);
+
   // Preview URL via Wayfinder
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   useEffect(() => {
+    // Reset preview URL when navigating to a new record
+    setPreviewUrl(null);
     if (record?.name) {
       fetchHtmlWithFallback(`ar://${record.name}`, 3)
         .then(u => setPreviewUrl(u))
