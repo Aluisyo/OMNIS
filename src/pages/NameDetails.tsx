@@ -1,4 +1,4 @@
-import { FC, useState } from 'react';
+import { FC, useState, useEffect } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { ArrowLeft, Globe, Clock, ExternalLink, ChevronRight, User, Calendar, Hash, Tag, DollarSign } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '../components/common/Card';
@@ -12,6 +12,7 @@ import { useData } from '../contexts/DataContext';
 import PageLoading from '../components/common/PageLoading';
 import ErrorMessage from '../components/common/ErrorMessage';
 import { ArNSRecord } from '../types';
+import { wayfinder, fetchHtmlWithFallback } from '../services/wayfinderService';
 
 const NameDetails: FC = () => {
   const { name } = useParams<{ name: string }>();
@@ -23,6 +24,16 @@ const NameDetails: FC = () => {
   const { records, loading, error } = useData();
   const record = records.find(r => r.name === name) || null;
 
+  // Preview URL via Wayfinder
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  useEffect(() => {
+    if (record?.name) {
+      fetchHtmlWithFallback(`ar://${record.name}`, 3)
+        .then(u => setPreviewUrl(u))
+        .catch(console.error);
+    }
+  }, [record?.name]);
+
   if (loading) return <PageLoading />;
 
   if (error) return <ErrorMessage message={error} />;
@@ -32,7 +43,8 @@ const NameDetails: FC = () => {
   // Helper to preview content using ar.io URL
   const renderPreview = () => {
     if (!record || !record.name) return null;
-    const arioUrl = `https://${record.name}.ar.io`;
+    if (!previewUrl) return null;
+    const arioUrl = previewUrl;
     return (
       <motion.div 
         className="mt-8"

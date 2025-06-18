@@ -1,18 +1,26 @@
-import { Wayfinder, NetworkGatewaysProvider, RandomRoutingStrategy } from '@ar.io/wayfinder-core';
+import { Wayfinder, NetworkGatewaysProvider, RandomRoutingStrategy, SimpleCacheGatewaysProvider } from '@ar.io/wayfinder-core';
 import { ARIO, type ARIOReadable } from '@ar.io/sdk';
 
 // Cast ARIO.mainnet() to ARIOReadable for Wayfinder
 const arioClient: ARIOReadable = ARIO.mainnet() as unknown as ARIOReadable;
 
-const wayfinder = new Wayfinder({
-  gatewaysProvider: new NetworkGatewaysProvider({
-    ario: arioClient,
-    sortBy: 'operatorStake',
-    sortOrder: 'desc',
-    limit: 10,
+export const wayfinder = new Wayfinder({
+  gatewaysProvider: new SimpleCacheGatewaysProvider({
+    ttlSeconds: 60 * 60, // cache the top 10 for 1 hour
+    gatewaysProvider: new NetworkGatewaysProvider({
+      ario: arioClient,
+      sortBy: 'operatorStake',
+      sortOrder: 'desc',
+      limit: 10,
+    }),
   }),
-  routingStrategy: new RandomRoutingStrategy(),
+  routingSettings: { strategy: new RandomRoutingStrategy() },
 });
+
+// subscribe to routing events
+wayfinder.emitter.on('routing-started', ({ originalUrl }) => console.log(`Routing started for ${originalUrl}`));
+wayfinder.emitter.on('routing-skipped', ({ originalUrl }) => console.log(`Routing skipped for ${originalUrl}`));
+wayfinder.emitter.on('routing-succeeded', ({ originalUrl, selectedGateway, redirectUrl }) => console.log(`Routing succeeded for ${originalUrl} via ${selectedGateway}`, redirectUrl));
 
 export async function fetchViaWayfinder<T>(url: string): Promise<T> {
   const res = await wayfinder.request(url);
@@ -20,4 +28,38 @@ export async function fetchViaWayfinder<T>(url: string): Promise<T> {
     throw new Error(`Wayfinder request failed: ${res.status} ${res.statusText}`);
   }
   return (await res.json()) as T;
+}
+
+// Retry wrapper: attempts fetchViaWayfinder up to maxAttempts to try new gateways
+export async function fetchWithFallback<T>(url: string, maxAttempts = 1): Promise<T> {
+  let lastError: any;
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    try {
+      return await fetchViaWayfinder<T>(url);
+    } catch (err) {
+      console.warn(`fetchWithFallback attempt ${attempt} failed for ${url}:`, err);
+      lastError = err;
+    }
+  }
+  throw lastError;
+}
+
+/**
+ * Fetch HTML via Wayfinder with fallback.
+ */
+export async function fetchHtmlWithFallback(url: string, maxAttempts = 3): Promise<string> {
+  let lastError: any;
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    try {
+      const res = await wayfinder.request(url);
+      if (!res.ok) {
+        throw new Error(`Wayfinder HTML request failed: ${res.status} ${res.statusText}`);
+      }
+      return res.url;
+    } catch (err) {
+      console.warn(`fetchHtmlWithFallback attempt ${attempt} failed for ${url}:`, err);
+      lastError = err;
+    }
+  }
+  throw lastError;
 }

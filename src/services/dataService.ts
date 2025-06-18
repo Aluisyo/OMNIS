@@ -1,7 +1,7 @@
 // src/services/dataService.ts
 import type { ArNSRecord } from '../types';
-import { ARNS_GATEWAY_URL } from '../config';
-import { fetchViaWayfinder } from './wayfinderService';
+import { getArnsGatewayUrl } from '../config';
+import { fetchWithFallback } from './wayfinderService';
 
 // Raw record includes backend endTimestamp for lease records
 type RawArNSRecord = ArNSRecord & { endTimestamp?: number };
@@ -10,7 +10,8 @@ type RawArNSRecord = ArNSRecord & { endTimestamp?: number };
  * Fetch the ArNS folder manifest and load all chunk JSON files.
  */
 export async function fetchAllRecords(): Promise<ArNSRecord[]> {
-  const manifestJsonRaw = await fetchViaWayfinder<any>(ARNS_GATEWAY_URL);
+  const gatewayUrl = await getArnsGatewayUrl();
+  const manifestJsonRaw = await fetchWithFallback<any>(gatewayUrl);
   console.log('fetchAllRecords: manifestJsonRaw=', manifestJsonRaw);
   // Support both standard and nested ArFS manifest
   const pathsMap: Record<string, { id: string }> = manifestJsonRaw.paths ?? manifestJsonRaw.manifest?.paths;
@@ -26,7 +27,7 @@ export async function fetchAllRecords(): Promise<ArNSRecord[]> {
   const chunks: RawArNSRecord[][] = await Promise.all(entries.map(async ([fname, { id }]) => {
     
     try {
-      const json = await fetchViaWayfinder<{ records: RawArNSRecord[] }>(`ar://${id}`);
+      const json = await fetchWithFallback<{ records: RawArNSRecord[] }>(`ar://${id}`);
       console.log(`fetchAllRecords: loaded ${json.records.length} records from ${fname}`);
       return json.records;
     } catch (error) {

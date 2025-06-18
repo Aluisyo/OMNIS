@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { Card, CardHeader, CardTitle, CardContent } from '../components/common/Card';
 import { useData } from '../contexts/DataContext';
 import { calculateAnalyticsStatsInWorker } from '../services/arnsWorkerClient';
@@ -18,6 +18,7 @@ const LiveFeed: React.FC = () => {
   const [statsError, setStatsError] = useState<string | null>(null);
   const [registrations, setRegistrations] = useState<ArNSRecord[]>([]);
   const [dbCount, setDbCount] = useState<number>(0);
+  const firstRender = useRef(true);
 
   const sortedRecords = useMemo(
     () => [...mapExpires(records)].sort((a, b) => (b.startTimestamp || 0) - (a.startTimestamp || 0)),
@@ -125,10 +126,11 @@ const LiveFeed: React.FC = () => {
   return (
     <motion.div 
       className="space-y-8"
-      initial="initial"
+      initial={firstRender.current ? "initial" : false}
       animate="animate"
       exit="exit"
       variants={pageVariants}
+      onAnimationComplete={() => { firstRender.current = false; }}
     >
       {/* Header section removed */}
 
@@ -149,7 +151,7 @@ const LiveFeed: React.FC = () => {
               </CardTitle>
             </CardHeader>
             <CardContent>
-              <AnimatePresence mode="wait">
+              <AnimatePresence initial={false} mode="wait">
                 {statsLoading ? (
                   <motion.div 
                     key="loading"
@@ -201,7 +203,7 @@ const LiveFeed: React.FC = () => {
               </CardTitle>
             </CardHeader>
             <CardContent>
-              <AnimatePresence mode="wait">
+              <AnimatePresence initial={false} mode="wait">
                 {statsLoading ? (
                   <motion.div 
                     key="loading"
@@ -253,7 +255,7 @@ const LiveFeed: React.FC = () => {
               </CardTitle>
             </CardHeader>
             <CardContent>
-              <AnimatePresence mode="wait">
+              <AnimatePresence initial={false} mode="wait">
                 {statsLoading ? (
                   <motion.div 
                     key="loading"
@@ -305,7 +307,7 @@ const LiveFeed: React.FC = () => {
               </CardTitle>
             </CardHeader>
             <CardContent>
-              <AnimatePresence mode="wait">
+              <AnimatePresence initial={false} mode="wait">
                 {statsLoading ? (
                   <motion.div 
                     key="loading"
@@ -349,7 +351,7 @@ const LiveFeed: React.FC = () => {
       </motion.div>
       
       {/* Error message */}
-      <AnimatePresence>
+      <AnimatePresence initial={false}>
         {dataError && (
           <motion.div 
             initial={{ opacity: 0, y: -10 }}

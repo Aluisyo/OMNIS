@@ -11,7 +11,7 @@
   },
   "dependencies": {
     "@ar.io/sdk": "^3.11.0",
-    "@ar.io/wayfinder-core": "^0.0.3-alpha.6",
+    "@ar.io/wayfinder-core": "^0.0.4",
     "@types/react-window": "^1.8.8",
     "arweave": "^1.14.4",
     "buffer": "^6.0.3",

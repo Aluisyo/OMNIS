@@ -1,7 +1,7 @@
 // src/services/initService.ts
 import { clearRecords, saveRecords, saveRecordsSmart } from '../utils/db';
-import { ARNS_GATEWAY_URL } from '../config';
-import { fetchViaWayfinder } from './wayfinderService';
+import { getArnsGatewayUrl } from '../config';
+import { fetchWithFallback } from './wayfinderService';
 
 /**
  * Initialize IndexedDB by fetching delta updates from Arweave manifest.
@@ -11,7 +11,8 @@ export async function initializeDB(): Promise<void> {
   console.log('📥 Initializing IndexedDB from Arweave manifest (delta fetch)...');
 
   // Fetch manifest via Wayfinder
-  const manifestJson: any = await fetchViaWayfinder<any>(ARNS_GATEWAY_URL);
+  const gatewayUrl = await getArnsGatewayUrl();
+  const manifestJson: any = await fetchWithFallback<any>(gatewayUrl);
   const pathsMap: Record<string, { id: string }> = manifestJson.paths ?? manifestJson.manifest?.paths;
   if (!pathsMap) {
     throw new Error('Manifest missing "paths"');
@@ -39,7 +40,7 @@ export async function initializeDB(): Promise<void> {
       newPaths.map(async fname => {
         const id = pathsMap[fname].id;
                 try {
-          const json = await fetchViaWayfinder<{ records: any[] }>(`ar://${id}`);
+          const json = await fetchWithFallback<{ records: any[] }>(`ar://${id}`);
           console.log(`Loaded ${json.records.length} from ${fname}`);
           return json.records;
         } catch (error) {

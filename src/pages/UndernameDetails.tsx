@@ -1,9 +1,10 @@
-import { FC } from 'react';
+import { FC, useState, useEffect } from 'react';
 import { useParams, Link, useNavigate, useLocation } from 'react-router-dom';
 import { ArrowLeft, Hash, Globe, User } from 'lucide-react';
 import { motion } from 'framer-motion';
 import Button from '../components/common/Button';
 import { useData } from '../contexts/DataContext';
+import { wayfinder, fetchHtmlWithFallback } from '../services/wayfinderService';
 import PageLoading from '../components/common/PageLoading';
 import ErrorMessage from '../components/common/ErrorMessage';
 import { Card, CardContent, CardHeader, CardTitle } from '../components/common/Card';
@@ -23,6 +24,13 @@ const UndernameDetails: FC = () => {
     ? records.find(r => r.name === parentNameFromState)
     : records.find(r => Array.isArray(r.underNames) && r.underNames.some(u => u.name === name));
   if (!parent) return <ErrorMessage message={`No parent ARNS found for undername ${name}`} />;
+
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  useEffect(() => {
+    fetchHtmlWithFallback(`ar://${name}_${parent.name}`, 3)
+      .then(u => setPreviewUrl(u))
+      .catch(console.error);
+  }, [name, parent.name]);
 
   // Animation variants
   const pageVariants = { initial: { opacity: 0 }, animate: { opacity: 1 }, exit: { opacity: 0 } };
@@ -85,7 +93,7 @@ const UndernameDetails: FC = () => {
                 style={{ minHeight: '240px', height: 'auto' }}
               >
                 <iframe
-                  src={`https://${name}_${parent.name}.ar.io`}
+                  src={previewUrl || ''}
                   title="Undername Preview"
                   className="w-full h-[400px] min-h-[240px] sm:h-[400px] border-0 rounded-lg"
                   allowFullScreen
