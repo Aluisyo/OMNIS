@@ -1,5 +1,11 @@
-import React, { Suspense } from 'react';
-import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
+import { Suspense } from 'react';
+import { HashRouter as Router, Routes, Route } from 'react-router-dom';
+import LiveFeed from './pages/LiveFeed';
+import Directory from './pages/Directory';
+import Analytics from './pages/Analytics';
+import TopHolders from './pages/TopHolders';
+import NameDetails from './pages/NameDetails';
+import UndernameDetails from './pages/UndernameDetails';
 import { ThemeProvider } from './contexts/ThemeContext';
 import { NotificationProvider } from './contexts/NotificationContext';
 import { OfflineProvider } from './contexts/OfflineContext';
@@ -7,12 +13,12 @@ import Layout from './components/layout/Layout';
 import ScrollToTop from './components/ScrollToTop';
 
 // Lazy load pages for code splitting
-const LiveFeed = React.lazy(() => import('./pages/LiveFeed'));
-const Directory = React.lazy(() => import('./pages/Directory'));
-const Analytics = React.lazy(() => import('./pages/Analytics'));
-const TopHolders = React.lazy(() => import('./pages/TopHolders'));
-const NameDetails = React.lazy(() => import('./pages/NameDetails'));
-const UndernameDetails = React.lazy(() => import('./pages/UndernameDetails'));
+
+
+
+
+
+
 
 // Fallback loader
 const PageLoader = () => (

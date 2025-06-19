@@ -152,7 +152,7 @@ const TopHolders: React.FC = () => {
               <Button
                 variant="outline"
                 size="sm"
-                onClick={refresh}
+                onClick={() => refresh()}
                 isLoading={dbLoading}
                 className="flex items-center gap-1 hover:bg-gray-100/80 dark:hover:bg-dark-300/30 transition-colors"
               >
@@ -230,7 +230,7 @@ const TopHolders: React.FC = () => {
                                 setModalOpen(true);
                               }}
                             >
-                              {primaryNamesMap[holder.address] ?? '-'}
+                              {primaryNamesMap[holder.address] ? decodeName(primaryNamesMap[holder.address]) : '-'}
                             </button>
                           </td>
                           <td className="px-4 py-4 whitespace-nowrap">
@@ -267,7 +267,7 @@ const TopHolders: React.FC = () => {
                           setSelectedPrimaryName(key);
                           setModalOpen(true);
                         }}>
-                          {primaryNamesMap[holder.address] ?? '-'}
+                          {primaryNamesMap[holder.address] ? decodeName(primaryNamesMap[holder.address]) : '-'}
                         </button>
                       </div>
                       <div>

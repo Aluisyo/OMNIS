@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { Calendar, Search, Filter, X, List, Clock } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '../components/common/Card';
@@ -48,7 +48,9 @@ const Directory: React.FC = () => {
     sortBy: 'registeredAt', // Always sort by registration date by default
     sortDirection: 'desc',  // Descending = latest first
     page: 1,
-    perPage: 25
+    perPage: 25,
+    typeFilter: '',
+    tagsFilter: []
   });
   
   const [showFilters, setShowFilters] = useState<boolean>(false);
@@ -57,18 +59,28 @@ const Directory: React.FC = () => {
   const [exportMenuOpen, setExportMenuOpen] = useState<boolean>(false);
   const [exportPageCount, setExportPageCount] = useState<number>(1);
   const totalPages = Math.ceil(total / filters.perPage);
+  const uniqueTags = useMemo(() => Array.from(new Set(allRecords.flatMap(r => r.tags ?? []))), [allRecords]);
+  const handleTypeFilterChange = (e: React.ChangeEvent<HTMLSelectElement>) => setFilters(f => ({ ...f, typeFilter: e.target.value as 'lease' | 'permabuy' | '', page: 1 }));
+  const handleTagToggle = (tag: string) => setFilters(f => {
+    const tags = f.tagsFilter ?? [];
+    if (tags.includes(tag)) {
+      return { ...f, tagsFilter: tags.filter(t => t !== tag), page: 1 };
+    }
+    return { ...f, tagsFilter: [...tags, tag], page: 1 };
+  });
 
   const listRef = useRef<HTMLDivElement>(null);
   const isSyncingFromUrl = useRef(false);
 
   const exportCsv = async (mode: 'current' | 'pages' | 'all', pagesCount = 1) => {
     let exportRecords: ArNSRecord[] = [];
+    const baseRecords = allRecords.filter(r => !filters.typeFilter || r.type === filters.typeFilter).filter(r => filters.tagsFilter?.length ? filters.tagsFilter.every(tag => r.tags?.includes(tag)) : true);
     if (mode === 'current') {
       exportRecords = filteredRecords;
     } else if (mode === 'pages') {
       const perPageLarge = filters.perPage * pagesCount;
       const result = await sortAndPaginateRecordsInWorker(
-        allRecords,
+        baseRecords,
         filters.searchTerm,
         filters.sortBy,
         filters.sortDirection,
@@ -78,7 +90,7 @@ const Directory: React.FC = () => {
       exportRecords = result.records;
     } else {
       const result = await sortAndPaginateRecordsInWorker(
-        allRecords,
+        baseRecords,
         filters.searchTerm,
         filters.sortBy,
         filters.sortDirection,
@@ -164,9 +176,13 @@ const Directory: React.FC = () => {
     if (allRecords.length > 0) {
       // Set a small timeout to ensure UI is responsive during loading
       const timer = setTimeout(async () => {
+          const baseRecords = allRecords
+            .filter(r => !filters.typeFilter || r.type === filters.typeFilter)
+            .filter(r => filters.tagsFilter?.length ? filters.tagsFilter.every(tag => r.tags?.includes(tag)) : true);
         try {
+
           const result = await sortAndPaginateRecordsInWorker(
-            allRecords,
+            baseRecords,
             filters.searchTerm,
             filters.sortBy,
             filters.sortDirection,
@@ -242,7 +258,9 @@ const Directory: React.FC = () => {
       sortBy: 'registeredAt',
       sortDirection: 'desc',
       page: 1,
-      perPage: 25
+      perPage: 25,
+      typeFilter: '',
+      tagsFilter: []
     });
     setSearchInput('');
     // Clear search input field
@@ -507,6 +525,35 @@ const Directory: React.FC = () => {
               </div>
               
               <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+                {/* Type Filter */}
+                <div>
+                  <label className="block text-xs font-medium text-gray-700 dark:text-gray-300">Type</label>
+                  <select
+                    value={filters.typeFilter || ''}
+                    onChange={handleTypeFilterChange}
+                    className="mt-1 block w-full rounded-md border border-gray-200/80 bg-white/80 dark:bg-gray-800/80 px-3 py-2 text-sm dark:border-gray-700/80 dark:text-white backdrop-blur-sm transition-all duration-200 focus:border-primary-400 dark:focus:border-accent-blue focus:ring-2 focus:ring-primary-400/20 dark:focus:ring-accent-blue/20"
+                  >
+                    <option value="">All</option>
+                    <option value="lease">Lease</option>
+                    <option value="permabuy">Permabuy</option>
+                  </select>
+                </div>
+                {/* Tags Filter */}
+                <div className="sm:col-span-2 lg:col-span-4">
+                  <label className="block text-xs font-medium text-gray-700 dark:text-gray-300">Tags</label>
+                  <div className="mt-1 flex flex-wrap gap-2">
+                    {uniqueTags.map(tag => (
+                      <button
+                        key={tag}
+                        type="button"
+                        onClick={() => handleTagToggle(tag)}
+                        className={`px-2 py-1 text-xs rounded-full border ${filters.tagsFilter?.includes(tag) ? 'bg-blue-200 border-blue-400 text-blue-800' : 'bg-gray-200 border-gray-300 text-gray-700'} transition`}
+                      >
+                        {tag}
+                      </button>
+                    ))}
+                  </div>
+                </div>
                 <div>
                   <label className="block text-xs font-medium text-gray-700 dark:text-gray-300">
                     Registration Date From

@@ -29,6 +29,7 @@ export const DataProvider: FC<DataProviderProps> = ({ children }: DataProviderPr
   const refresh = async ({ showLoading = false }: { showLoading?: boolean } = {}) => {
     if (fetchingRef.current) return;
     fetchingRef.current = true;
+      if (!navigator.onLine) { setLoading(false); fetchingRef.current = false; return; }
     if (showLoading) setLoading(true);
     setError(null);
     try {
@@ -51,9 +52,9 @@ export const DataProvider: FC<DataProviderProps> = ({ children }: DataProviderPr
         prevRecordsRef.current = recs;
       }
     } catch (e: any) {
-      setError(e.message || String(e));
+      console.warn('Network refresh failed:', e);
     } finally {
-      if (showLoading) setLoading(false);
+      setLoading(false);
       fetchingRef.current = false;
     }
   };
@@ -63,17 +64,39 @@ export const DataProvider: FC<DataProviderProps> = ({ children }: DataProviderPr
     if ('Notification' in window) {
       Notification.requestPermission();
     }
-    // Initial load, periodic refresh every 5 minutes, and refresh on window focus
+    // Setup focus listener for background refresh
     const onFocus = () => refresh();
     window.addEventListener('focus', onFocus);
-    // initial load with loader
-    refresh({ showLoading: true });
+
+    // 1) Immediate load from IndexedDB
+    (async () => {
+      let dbRecs: ArNSRecord[] = [];
+      try {
+        dbRecs = await getAllArnsFromDB();
+        setRecords(dbRecs);
+            prevRecordsRef.current = dbRecs;
+        // if we have cached data, hide loader immediately
+        if (dbRecs.length > 0) {
+          setLoading(false);
+        }
+      } catch (e: any) {
+        setError(e.message || String(e));
+        // hide loader on DB error so network fetch shows next
+        setLoading(false);
+      }
+      // Background network refresh, show loader if no cache
+      await refresh({ showLoading: dbRecs.length === 0 });
+    })();
+
+    // Periodic background refresh
     const intervalId = setInterval(() => refresh(), 5 * 60 * 1000);
+
     return () => {
       window.removeEventListener('focus', onFocus);
       clearInterval(intervalId);
     };
   }, []);
+
 
   return (
     <DataContext.Provider value={{ records, loading, error, refresh }}>

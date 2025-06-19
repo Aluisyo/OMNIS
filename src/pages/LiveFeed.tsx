@@ -539,7 +539,7 @@ const LiveFeed: React.FC = () => {
               </div>
               <div><span className="font-semibold">Registered:</span> {record.startTimestamp ? new Date(record.startTimestamp).toLocaleString() : '-'}</div>
               <div><span className="font-semibold">Expires:</span> {record.type === 'lease' ? (record.expiresAt ? new Date(record.expiresAt).toLocaleString() : '-') : record.type === 'permabuy' ? 'Never' : '-'}</div>
-              <div><span className="font-semibold">ANT:</span> {(record.contractTxId || record.processId) ? `${(record.processId || record.contractTxId).slice(0,6)}...` : '-'}</div>
+              <div><span className="font-semibold">ANT:</span> {(record.contractTxId || record.processId) ? `${(record.contractTxId || record.processId)!.slice(0,6)}...` : '-'}</div>
               <div><span className="font-semibold">Price:</span> {formatIO(record.purchasePrice)}</div>
             </div>
           </div>

@@ -31,7 +31,7 @@ export async function fetchViaWayfinder<T>(url: string): Promise<T> {
 }
 
 // Retry wrapper: attempts fetchViaWayfinder up to maxAttempts to try new gateways
-export async function fetchWithFallback<T>(url: string, maxAttempts = 1): Promise<T> {
+export async function fetchWithFallback<T>(url: string, maxAttempts = 3): Promise<T> {
   let lastError: any;
   for (let attempt = 1; attempt <= maxAttempts; attempt++) {
     try {
@@ -45,19 +45,19 @@ export async function fetchWithFallback<T>(url: string, maxAttempts = 1): Promis
 }
 
 /**
- * Fetch HTML via Wayfinder with fallback.
+ * Resolve any URL via Wayfinder with fallback.
  */
-export async function fetchHtmlWithFallback(url: string, maxAttempts = 3): Promise<string> {
+export async function resolveUrlWithFallback(url: string, maxAttempts = 3): Promise<string> {
   let lastError: any;
   for (let attempt = 1; attempt <= maxAttempts; attempt++) {
     try {
       const res = await wayfinder.request(url);
       if (!res.ok) {
-        throw new Error(`Wayfinder HTML request failed: ${res.status} ${res.statusText}`);
+        throw new Error(`Wayfinder request failed: ${res.status} ${res.statusText}`);
       }
       return res.url;
     } catch (err) {
-      console.warn(`fetchHtmlWithFallback attempt ${attempt} failed for ${url}:`, err);
+      console.warn(`resolveUrlWithFallback attempt ${attempt} failed for ${url}:`, err);
       lastError = err;
     }
   }

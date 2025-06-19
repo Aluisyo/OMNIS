@@ -12,7 +12,7 @@ import { useData } from '../contexts/DataContext';
 import PageLoading from '../components/common/PageLoading';
 import ErrorMessage from '../components/common/ErrorMessage';
 import { ArNSRecord } from '../types';
-import { fetchHtmlWithFallback } from '../services/wayfinderService';
+import { resolveUrlWithFallback } from '../services/wayfinderService';
 
 const NameDetails: FC = () => {
   const { name } = useParams<{ name: string }>();
@@ -37,7 +37,7 @@ const NameDetails: FC = () => {
     // Reset preview URL when navigating to a new record
     setPreviewUrl(null);
     if (record?.name) {
-      fetchHtmlWithFallback(`ar://${record.name}`, 3)
+      resolveUrlWithFallback(`ar://${record.name}`, 3)
         .then(u => setPreviewUrl(u))
         .catch(console.error);
     }

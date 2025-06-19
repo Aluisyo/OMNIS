@@ -4,10 +4,11 @@ import { ArrowLeft, Hash, Globe, User } from 'lucide-react';
 import { motion } from 'framer-motion';
 import Button from '../components/common/Button';
 import { useData } from '../contexts/DataContext';
-import { fetchHtmlWithFallback } from '../services/wayfinderService';
+import { resolveUrlWithFallback } from '../services/wayfinderService';
 import PageLoading from '../components/common/PageLoading';
 import ErrorMessage from '../components/common/ErrorMessage';
 import { Card, CardContent, CardHeader, CardTitle } from '../components/common/Card';
+import { decodeName } from '../utils/punycode';
 
 const UndernameDetails: FC = () => {
   const { name } = useParams<{ name: string }>();
@@ -27,7 +28,7 @@ const UndernameDetails: FC = () => {
 
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   useEffect(() => {
-    fetchHtmlWithFallback(`ar://${name}_${parent.name}`, 3)
+    resolveUrlWithFallback(`ar://${name}_${parent.name}`, 3)
       .then(u => setPreviewUrl(u))
       .catch(console.error);
   }, [name, parent.name]);
@@ -49,7 +50,7 @@ const UndernameDetails: FC = () => {
           Back to Directory
         </Button>
         <h1 className="mt-2 text-2xl font-bold bg-clip-text bg-gradient-to-r from-blue-600 to-purple-600 text-transparent">
-          {name}
+          {decodeName(name!)}
         </h1>
         <p className="text-sm text-gray-600 dark:text-gray-400">Undername Details</p>
       </motion.div>
@@ -60,7 +61,7 @@ const UndernameDetails: FC = () => {
             <motion.div className="flex items-center gap-2" variants={itemVariants}>
               <Hash className="h-5 w-5 text-blue-500" />
               <CardTitle className="text-xl font-semibold bg-clip-text bg-gradient-to-r from-blue-600 to-indigo-600 text-transparent">
-                Undername: <span className="font-mono">{name}</span>
+                Undername: <span className="font-mono">{decodeName(name!)}</span>
               </CardTitle>
             </motion.div>
           </CardHeader>
@@ -77,7 +78,7 @@ const UndernameDetails: FC = () => {
                 to={`/name/${parent.name}`}
                 className="font-mono text-blue-600 dark:text-blue-400 hover:underline"
               >
-                {parent.name}
+                {decodeName(parent.name!)}
               </Link>
             </motion.div>
             <motion.div

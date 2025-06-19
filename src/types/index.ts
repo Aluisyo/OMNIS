@@ -58,4 +58,6 @@ export interface FilterOptions {
   sortDirection: 'asc' | 'desc';
   page: number;
   perPage: number;
+  typeFilter?: 'lease' | 'permabuy' | '';
+  tagsFilter?: string[];
 }
